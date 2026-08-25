@@ -1,0 +1,61 @@
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# --- Tooling / editors -----------------------------------------------------
+# Claude Code keeps two kinds of settings, and only one of them is personal:
+#   .claude/settings.local.json   per-machine (a permission allowlist here) -- ignore
+#   .claude/settings.json         shared project config -- COMMIT it
+# So this ignores the local file specifically rather than the whole folder.
+# Blanket-ignoring .claude/ would silently block shared hooks or project
+# permissions if they are ever added.
+.claude/settings.local.json
+.claude/*.local.json
+
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- OS junk ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Training output -------------------------------------------------------
+# Anything a training run produces rather than a human writing it.
+#
+# DELIBERATELY NOT IGNORED: simple_agent.npz. It is 3 KB, it is the worked
+# example the README points at, and keeping it means someone can clone the
+# repo and immediately run `python train_simple.py play` without spending a
+# minute training first. It is checked in on purpose -- see the negation
+# below, which has to come after any rule that would otherwise catch it.
+*.npz
+!simple_agent.npz
+
+# Stable-Baselines3 writes models as .zip; a PPO run on the full env is
+# megabytes, not kilobytes, so those stay out.
+*.zip
+*.pt
+*.pth
+*.ckpt
+
+# Tensorboard / run logs
+runs/
+logs/
+tb_logs/
+*.log
+
+# Benchmark and diagnostic dumps
+*.prof
+balance_*.json
