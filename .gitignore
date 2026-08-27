@@ -37,7 +37,7 @@ desktop.ini
 #
 # DELIBERATELY NOT IGNORED: simple_agent.npz. It is 3 KB, it is the worked
 # example the README points at, and keeping it means someone can clone the
-# repo and immediately run `python train_simple.py play` without spending a
+# repo and immediately run `python testing/train_simple.py play` without a
 # minute training first. It is checked in on purpose -- see the negation
 # below, which has to come after any rule that would otherwise catch it.
 *.npz

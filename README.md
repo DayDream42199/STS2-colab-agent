@@ -10,7 +10,7 @@ the trusted source over the human-written summary pages. Where something is
 approximated or unverified, it is flagged in code comments and in
 [Scope](#scope--what-is-deliberately-not-here).
 
-**Status:** all three acts ported, <!--test_suites-->20<!--/--> test suites, reproducible from a
+**Status:** all three acts ported, <!--test_suites-->21<!--/--> test suites, reproducible from a
 seed, ~7.5k env steps/sec single-threaded.
 
 ---
@@ -19,13 +19,27 @@ seed, ~7.5k env steps/sec single-threaded.
 
 ```bash
 pip install numpy
-python play.py            # play it yourself
-python demo.py            # scripted showcase
-python bench.py           # difficulty measurement
-python tests/run_all.py   # the test suite (~5s)
+python testing/play.py         # play it yourself
+python testing/demo.py         # scripted showcase
+python testing/bench.py        # difficulty measurement
+python game_engine/tests/run_all.py   # the test suite (~9s)
 ```
 
-## What's here
+Run everything from the repo root — the entry points put the root on
+`sys.path` themselves, so `python testing/play.py` works without installing
+anything.
+
+## Layout
+
+```
+game_engine/   the rules and content, plus the RL environment
+  tests/       the 21 suites, beside the code they verify
+testing/       ways to drive it: play, benchmark, demo, sandbox, trainer
+  tools/       diagnostics kept because each produced a figure quoted here
+config.json    what play.py loads: restrictions, party, encounter
+```
+
+### `game_engine/` — the engine modules import only each other
 
 | file | what it holds |
 |---|---|
@@ -33,14 +47,25 @@ python tests/run_all.py   # the test suite (~5s)
 | `entities.py` | `Entity` → `Player`/`Enemy`: HP, block, damage resolution, the event-hook registry, and the content RNG |
 | `cards.py` | `Card` model with upgrade/X-cost/dynamic-cost support, and the complete <!--ironclad_cards-->91<!--/-->-card Ironclad list |
 | `enemies.py` | Movesets with telegraphed intents, and real multiplayer HP/block scaling |
-| `combat.py` | `CombatEngine`: runs 1–4 players vs N enemies; owns the play-legality rules |
-| `env.py` | `CombatEnv`: Gym-style `reset()`/`step()` wrapper for RL |
 | `relics.py` | `Relic` model + <!--relics-->83<!--/--> wiki-sourced relics |
 | `potions.py` | `Potion` model + all <!--potions-->52<!--/--> Ironclad-relevant potions |
-| `play.py` | Terminal client: single fights or a 6-fight gauntlet with rewards |
-| `bench.py` | Difficulty measurement and balance-regression detection |
-| `tests/` | <!--test_suites-->20<!--/--> suites, run by `tests/run_all.py` |
-| `tools/` | Slow diagnostics kept because each produced a figure quoted here |
+| `combat.py` | `CombatEngine`: runs 1–4 players vs N enemies; owns the play-legality rules |
+| `env.py` | `CombatEnv` / `GymnasiumEnv`: the machine-player interface |
+
+### `testing/` — everything that drives the engine
+
+| file | what it holds |
+|---|---|
+| `play.py` | Terminal client: single fights or a 6-fight gauntlet with rewards. Reads `config.json` |
+| `bench.py` | Difficulty measurement and balance-regression detection. Imports `play` to drive the real gauntlet |
+| `demo.py` | Scripted showcase: card-pool smoke test, co-op battle, random RL episode |
+| `simple.py` | The cut-down game — Strike and Defend only, 1–4 heroes — plus a 3-action `SimpleEnv` |
+| `train_simple.py` | A pure-numpy REINFORCE agent for `simple.py`, saved to `simple_agent.npz` |
+
+**Why `bench.py` is here rather than in `game_engine/`:** it calls
+`play.run_gauntlet()` to measure the curve players actually get. Putting it in
+the engine package would make `game_engine` depend on `testing`, which is
+backwards.
 
 For *why* things are the way they are — the porting history, the ambiguous
 wiki readings, the bugs each pass turned up — see
@@ -72,6 +97,104 @@ Co-op uses a free-choice "Whose turn?" menu each cycle rather than a fixed
 P1-then-P2 order — one terminal has one input stream, so true simultaneous
 input isn't possible, but you are not locked into a sequence.
 
+### Configuring a run — `config.json`
+
+`play.py` reads `config.json` for its setup, so changing the restrictions
+doesn't mean editing Python. Anything left `null` or `"ask"` is still
+prompted for, so the shipped config behaves exactly like the old startup.
+
+```bash
+python testing/play.py                    # uses ./config.json
+python testing/play.py my_setup.json      # or any other file
+```
+
+Four presets, each a starting point you can override field by field:
+
+| preset | what it gives you |
+|---|---|
+| `full` | the whole game — every card, relics, potions, all rewards |
+| `basic` | Strike and Defend only, 30 HP, no relics/potions/rewards, straight into one fight |
+| `coop` | three heroes — Ironclad plus two support decks — on the full game |
+| `no_items` | full card pool, but no relics and no potions |
+
+```json
+{
+  "preset": "basic",
+  "party": [{"name": "Ironclad", "hp": 30, "energy": 3,
+             "deck": "strike_defend", "starting_relic": null}],
+  "content": {"relics": false, "potions": false, "card_rewards": false,
+              "relic_rewards": false, "potion_rewards": false},
+  "cards": {"allow": ["Strike", "Defend"], "deny": []},
+  "mode": "single",
+  "encounter": "1",
+  "seed": null
+}
+```
+
+`deck` is `"starter"`, `"coop_support"`, `"strike_defend"`, or an explicit
+list like `["Strike", "Strike", "Bash"]`. Add up to four party members for
+co-op. A `seed` pins the shuffles and enemy HP, so a UI can hand the same
+fight to a human and to an agent.
+
+**`cards.allow` / `cards.deny` apply to reward screens too**, not just the
+starting deck — otherwise a "Strike and Defend only" run would be offered a
+Perfected Strike after the first win.
+
+**Statuses are deliberately not a toggle.** Vulnerable, Weak and the rest
+come from enemy moves and card effects, so switching them off would mean
+rewriting the content rather than flipping a flag. Restrict `encounter`
+instead — a simple enemy applies none. Claiming a `statuses: false` switch
+that didn't really work would be worse than not having one.
+
+A bad config fails with a message naming the key (`party[0].hp must be a
+positive integer, got -3`) rather than a traceback from inside the engine —
+`game_engine/tests/test_config.py` checks eleven failure modes, because a UI writing this
+file will get it wrong sometimes.
+
+The suite checks that `config.json` **parses**, not what it says. It is a
+settings file you are meant to edit, so asserting its contents would report a
+legitimate switch to co-op as a broken build. The "full game by default"
+promise is asserted against an empty config instead.
+
+### `simple.py` — the cut-down game, solo or co-op
+
+Same `config.json`, its own section. Nothing here is prompted for:
+
+```json
+"simple": {"players": 3, "player_hp": 30, "energy": 3,
+           "enemy_hp": 75, "enemy_damage": 11,
+           "max_turns": 50, "scale_enemy": null}
+```
+
+```bash
+python testing/simple.py               # uses ./config.json
+python testing/simple.py coop.json     # or any other file
+```
+
+`players` is 1–4. Every entry point takes these as keyword arguments —
+`battle(greedy, players=3)`, `SimpleEnv(players=3)`,
+`play_interactive(players=3)` — and `config.simple_kwargs(cfg)` hands you
+exactly that dict.
+
+At the keyboard, `->` marks whose sub-turn it is. The party keys:
+
+| key | effect |
+|---|---|
+| `n` | next hero in seat order; past the last one the round ends |
+| `s2` | jump straight to Hero 2 — any living hero, forwards or back |
+| `s` | list the heroes and ask which |
+| `a` | every hero's hand at once, `x` marking what they cannot afford |
+| `e` | end the round for **everyone** — the enemy attacks |
+
+Seat order is only the default; `s` is there so you can open with whichever
+hand `a` showed you is worth opening with. All four keys are hidden in solo.
+
+**`scale_enemy: null` means "on when `players > 1`."** The Dummy hits one
+target, so without scaling damage-per-hero falls as 1/n while party HP grows
+as n, and co-op becomes a walkover. Note that co-op is *not* tuned the way
+solo is — see `battle()`'s docstring for the measured table, including the
+policy ordering inverting at 3–4 heroes.
+
 ---
 
 ## Training against it
@@ -84,13 +207,14 @@ observation, and `hand_card_ids()` if you want your own card embedding.
 ### Which class to use
 
 `CombatEnv` keeps the **old gym API** — `reset() -> obs`, `step() -> (obs,
-reward, done, info)` — because `play.py`, `demo.py`, `bench.py`, `tools/` and
-the test suite all drive it directly and none of them want a 5-tuple.
+reward, done, info)` — because `play.py`, `demo.py`, `bench.py`,
+`testing/tools/` and the test suite all drive it directly and none of them
+want a 5-tuple.
 
 For Gymnasium / Stable-Baselines3, use the adapter:
 
 ```python
-from env import GymnasiumEnv
+from game_engine.env import GymnasiumEnv
 
 env = GymnasiumEnv(make_players, make_enemies, seed=0)
 obs, info = env.reset()
@@ -144,7 +268,7 @@ policies, no reproducing a specific fight to debug it.
 Construction-time randomness now draws from `entities.CONTENT_RNG`, seeded by
 `seed_content()`. Seeding is the *driver's* job, because only the driver
 knows when an episode begins and it must happen before the factories run —
-`env.reset()`, `bench.run_encounter()` and `tools/` all do it.
+`env.reset()`, `bench.run_encounter()` and `testing/tools/` all do it.
 
 Two things worth knowing:
 
@@ -337,17 +461,17 @@ case that cannot occur would be guessing.
 ## Tests
 
 ```
-$ python tests/run_all.py
+$ python game_engine/tests/run_all.py
 test_thorns      PASS    0.1s
 ...
 test_state_drift PASS    0.1s
 ...
 smoke_all        PASS    0.6s
 ----------------------------------------
-20/20 passed in 8.0s
+21/21 passed in 9.0s
 ```
 
-<!--test_suites-->20<!--/--> suites, several hundred assertions, ~5 seconds. `python tests/run_all.py
+<!--test_suites-->21<!--/--> suites, several hundred assertions, ~5 seconds. `python game_engine/tests/run_all.py
 env choice` filters by name; `-v` streams each suite's output; it exits
 non-zero with the failing `[FAIL]` lines, so it works as a commit gate.
 
@@ -402,10 +526,11 @@ Markers rather than regexing the prose, deliberately: the numbers are not
 distinguishable by value. "18" appears here as the curse count, an
 observation size, a benchmark percentage and a table cell.
 
-### `tools/` — the diagnostics behind the numbers
+### `testing/tools/` — the diagnostics behind the numbers
 
-Slow experiments, deliberately not in the runner, kept because each produced
-a figure this file states:
+Experiments, deliberately not in the runner — they measure rather than
+assert, so there is nothing for a runner to pass or fail. Each produced a
+figure this file states:
 
 - `diag36_matrix.py` — the deck ablation showing the "flat difficulty curve"
   was a median artifact
@@ -415,6 +540,11 @@ a figure this file states:
   disagreed with the engine, and that the hand was invisible
 - `choice_ab.py` / `choice_variants.py` — the A/B showing greedy-everywhere
   loses to random
+
+Run them from the repo root — `python testing/tools/diag36_matrix.py`. All
+six together take about 26s. They sit under `testing/` rather than beside the
+engine because four of them import `bench.py` and `play.py`, and
+`game_engine/` is not allowed to depend on anything outside itself.
 
 ---
 

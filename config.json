@@ -1,0 +1,35 @@
+{
+  "preset": "full",
+  "party": [
+    {
+      "name": "Ironclad",
+      "hp": 80,
+      "energy": 3,
+      "deck": "starter",
+      "starting_relic": "Burning Blood"
+    }
+  ],
+  "content": {
+    "relics": true,
+    "potions": true,
+    "card_rewards": true,
+    "relic_rewards": true,
+    "potion_rewards": true
+  },
+  "cards": {
+    "allow": null,
+    "deny": []
+  },
+  "mode": "ask",
+  "encounter": null,
+  "seed": null,
+  "simple": {
+    "players": 4,
+    "player_hp": 30,
+    "energy": 3,
+    "enemy_hp": 75,
+    "enemy_damage": 11,
+    "max_turns": 50,
+    "scale_enemy": null
+  }
+}
