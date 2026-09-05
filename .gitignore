@@ -35,20 +35,16 @@ desktop.ini
 # --- Training output -------------------------------------------------------
 # Anything a training run produces rather than a human writing it.
 #
-# DELIBERATELY NOT IGNORED: simple_agent.npz. It is 3 KB, it is the worked
-# example the README points at, and keeping it means someone can clone the
-# repo and immediately run `python testing/train_simple.py play` without a
-# minute training first. It is checked in on purpose -- see the negation
-# below, which has to come after any rule that would otherwise catch it.
+# DELIBERATELY NOT IGNORED: simple_agent.pt, the worked example the README
+# points at. Keeping it means someone can clone and run
+# `python testing/train_torch.py play` without training first. The negation
+# has to come after the *.pt rule that would otherwise catch it.
 *.npz
-!simple_agent.npz
-
-# Stable-Baselines3 writes models as .zip; a PPO run on the full env is
-# megabytes, not kilobytes, so those stay out.
 *.zip
-*.pt
 *.pth
 *.ckpt
+*.pt
+!simple_agent.pt
 
 # Tensorboard / run logs
 runs/

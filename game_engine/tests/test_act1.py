@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Verification for tasks #23/#24/#33: mid-combat summoning, the remaining
-Act 1 elites and bosses, and the mechanics they needed."""
+"""Verification for tasks #23/#24/#33: mid-combat summoning, the remaining Act 1 elites and bosses..."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -74,9 +70,6 @@ kill(eng, parasite)
 check("Phrog Parasite spawns 4 Wrigglers", sum(1 for e in eng.enemies if e.alive), 4)
 check("...all Wrigglers", {e.name for e in eng.enemies if e.alive}, {"Wriggler"})
 
-# Stunned spawns take no action on their first enemy phase. Wriggler opens
-# on Wriggle (shuffles Infection, gains Strength) rather than an attack, so
-# "did it act" is measured by the Infection cards, not by HP.
 before_infections = sum(1 for c in p.discard_pile if c.name == "Infection")
 eng.run_enemy_turn()
 check("stunned spawns do nothing on the turn they appear",
@@ -89,8 +82,8 @@ check("...and act on the next one",
 
 fog = E.make_living_fog()
 eng, p = setup([fog])
-eng.end_player_turn(); eng.run_enemy_turn()          # Advanced Gas
-eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()   # Bloat
+eng.end_player_turn(); eng.run_enemy_turn()
+eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()
 check("Living Fog's Bloat summons a Gas Bomb",
       any(e.name == "Gas Bomb" for e in eng.enemies), True)
 bomb = next(e for e in eng.enemies if e.name == "Gas Bomb")
@@ -115,7 +108,6 @@ for _ in range(30):
 check("Two-Tailed Rat's unbounded Call for Backup stops at the enemy cap",
       len(eng.enemies) <= CombatEngine.MAX_ENEMIES, True)
 
-# Summoned enemies must be scaled for the party like starting ones.
 merc = E.make_gremlin_merc()
 ps = [Player(f"P{i}", 500, 99, make_starter_deck()) for i in range(2)]
 eng2 = CombatEngine(ps, [merc], seed=1)
@@ -141,8 +133,8 @@ check("...which ends the fight", eng.victory, True)
 
 fat = E.make_fat_gremlin()
 eng, p = setup([fat])
-eng.end_player_turn(); eng.run_enemy_turn()      # Spawned: does nothing
-eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()  # Flee
+eng.end_player_turn(); eng.run_enemy_turn()
+eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()
 check("Fat Gremlin flees on its second turn", fat.alive, False)
 
 print()
@@ -200,11 +192,11 @@ print("Ceremonial Beast: the Plow phase change")
 print("=" * 74)
 beast = E.make_ceremonial_beast()
 eng, p = setup([beast])
-eng.end_player_turn(); eng.run_enemy_turn()          # Stamp
+eng.end_player_turn(); eng.run_enemy_turn()
 check("Stamp sets the Plow threshold", beast.get_status(StatusType.PLOW), 150)
-eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()   # Plow
+eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()
 check("phase 1 builds Strength", beast.get_status(StatusType.STRENGTH), 2)
-beast.hp = 140          # cross the threshold
+beast.hp = 140
 eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()
 check("crossing the threshold Stuns it", beast.current_move.name != "Plow", True)
 check("...and wipes all its Strength", beast.get_status(StatusType.STRENGTH), 0)
@@ -221,7 +213,7 @@ print("Waterfall Giant: Steam Eruption is a posthumous bomb")
 print("=" * 74)
 giant = E.make_waterfall_giant()
 eng, p = setup([giant])
-eng.end_player_turn(); eng.run_enemy_turn()          # Pressurize
+eng.end_player_turn(); eng.run_enemy_turn()
 check("Pressurize stores 15 Steam", giant.get_status(StatusType.STEAM_ERUPTION), 15)
 for _ in range(3):
     eng.start_player_turn(); eng.end_player_turn(); eng.run_enemy_turn()
@@ -234,8 +226,6 @@ eng._check_victory_defeat()
 check("killing it queues an eruption", len(eng.pending_eruptions), 1)
 check("...but it was the last enemy, so the fight ends first", eng.victory, True)
 
-# The bomb only matters when the fight continues, so re-run it with a
-# second enemy still standing.
 giant = E.make_waterfall_giant()
 bystander = E.make_nibbit()
 bystander.max_hp = bystander.hp = 500
@@ -250,7 +240,6 @@ php = p.hp
 eng.end_player_turn()
 check("...and the eruption lands at the end of your next turn", php - p.hp, 24)
 check("...then it is spent", eng.pending_eruptions, [])
-# It no longer kills itself: the invented About To Blow -> Explode finale is gone.
 check("the boss has no self-destruct move left",
       any(m.name in ("About To Blow", "Explode") for m in E.make_waterfall_giant().moveset),
       False)

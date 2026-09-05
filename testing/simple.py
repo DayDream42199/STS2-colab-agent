@@ -1,29 +1,5 @@
 # -*- coding: utf-8 -*-
-"""The smallest interesting version of the game: Strike, Defend, one enemy.
-
-WHY THIS EXISTS. The full game is 226 cards, 106 enemies, 181 actions and an
-817-float observation. That is a hard first target for an agent and a hard
-first read for a person. This strips it to the two cards everyone understands
-and one enemy that does exactly one thing, so you can watch a whole fight go
-past and see every rule that fired.
-
-WHAT IT IS NOT: a second implementation of combat. Everything here runs on the
-real CombatEngine with real Card objects -- this file only chooses a small
-deck and a small enemy. That matters: a hand-written mini-battle would be a
-second copy of the rules, and the two would drift the first time either
-changed. Whatever you learn here is true of the real game.
-
-Statuses, relics and potions are not "turned off" -- there is nothing to turn
-off. The systems exist in the engine, but nothing in this file applies a
-status, grants a relic or hands out a potion, so they stay inert. Add a card
-that applies Vulnerable and it will simply work.
-
-    python simple.py                # PLAY IT -- one fight, in the terminal
-    python simple.py demo           # watch a scripted fight + a policy sweep
-
-    from testing.simple import battle, greedy
-    result = battle(greedy, seed=0, verbose=True)
-"""
+"""The smallest interesting version of the game: Strike, Defend, one enemy."""
 
 import os as _os
 import sys as _sys
@@ -32,19 +8,14 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 
 from typing import Callable, List, Optional
 
-from game_engine.cards import Card, CardType, TargetMode, fx_strike, fx_defend
+from game_engine.cards import Card, CardType, TargetMode, fx_plain_attack, fx_defend
 from game_engine.combat import CombatEngine
 from game_engine.enemies import Enemy, IntentType, Move
 from game_engine.entities import Player, seed_content
 
-# --- the two cards ---------------------------------------------------------
-# Real Card objects with the real effect functions, so they resolve through
-# the same damage and block pipeline every other card uses. The numbers are
-# the game's own: Strike 6 damage, Defend 5 block, both cost 1.
-
 
 def make_strike() -> Card:
-    return Card("Strike", 1, CardType.ATTACK, TargetMode.SINGLE_ENEMY, fx_strike,
+    return Card("Strike", 1, CardType.ATTACK, TargetMode.SINGLE_ENEMY, fx_plain_attack,
                 values={"damage": 6}, description="Deal 6 damage.")
 
 
@@ -54,23 +25,13 @@ def make_defend() -> Card:
 
 
 def make_deck(strikes: int = 5, defends: int = 5) -> List[Card]:
-    """A deck of nothing but Strikes and Defends.
-
-    Ten cards and a five-card draw means you see half your deck every turn,
-    which keeps the shuffle from being the thing that decides the fight."""
+    """A deck of nothing but Strikes and Defends."""
     return [make_strike() for _ in range(strikes)] + \
            [make_defend() for _ in range(defends)]
 
 
-# --- the one enemy ---------------------------------------------------------
-
 def make_party(count: int = 1, hp: int = 30, energy: int = 3) -> List[Player]:
-    """`count` identical heroes, each with a Strike/Defend deck.
-
-    Identical on purpose: in the cut-down game the interesting co-op question
-    is who spends their energy blocking versus attacking, not who brought the
-    better deck. Give them different decks and you cannot tell which effect
-    you are looking at."""
+    """`count` identical heroes, each with a Strike/Defend deck."""
     if not 1 <= count <= 4:
         raise ValueError("the engine supports 1-4 players, got {}".format(count))
     return [Player("Hero" if count == 1 else "Hero {}".format(i + 1),
@@ -79,26 +40,15 @@ def make_party(count: int = 1, hp: int = 30, energy: int = 3) -> List[Player]:
 
 
 def make_dummy(hp: int = 40, damage: int = 8) -> Enemy:
-    """An enemy with a single move: hit the player for a fixed amount.
-
-    No statuses, no scaling, no phases, and its intent never changes -- so
-    "how much damage is coming" is knowable and blocking is a real decision
-    rather than a guess. It is the simplest thing that still makes Defend
-    worth playing."""
+    """An enemy with a single move: hit the player for a fixed amount."""
     def attack(engine, enemy):
         dealt = enemy.deal_attack_damage(damage)
         engine.pick_enemy_attack_target().take_damage(
             dealt, log=engine.log, label=enemy.name, attacker=enemy)
 
     move = Move("Hit", IntentType.ATTACK, attack, damage=damage)
-    # choose_move(enemy, turn) -> Move. It only has one, so turn is ignored.
     return Enemy("Dummy", hp, [move], lambda enemy, turn: move)
 
-
-# --- policies --------------------------------------------------------------
-# A policy is: given the engine and the player, return a card to play, or None
-# to end the turn. That is the whole interface -- swap in a neural net later
-# and nothing else changes.
 
 def greedy(engine, player) -> Optional[Card]:
     """Block if the incoming hit would actually hurt, otherwise attack."""
@@ -112,7 +62,7 @@ def greedy(engine, player) -> Optional[Card]:
     for card in playable:
         if card.name == wanted:
             return card
-    return playable[0]          # only the other kind left -- play it anyway
+    return playable[0]
 
 
 def aggressive(engine, player) -> Optional[Card]:
@@ -128,14 +78,8 @@ def random_policy(engine, player) -> Optional[Card]:
     return player.rng.choice(playable) if playable else None
 
 
-# --- the core battle function ----------------------------------------------
-
 class Result(object):
-    """What came out of one fight.
-
-    `party_hp` is a list, one entry per hero, so a co-op result is not
-    squeezed into a single number. `player_hp` stays as the FIRST hero's HP
-    so solo callers written before co-op existed keep working."""
+    """What came out of one fight."""
 
     def __init__(self, won, turns, party_hp, enemy_hp, log):
         self.won = won
@@ -157,64 +101,10 @@ def battle(policy: Callable = greedy, seed: Optional[int] = None,
            enemy_hp: int = 75, enemy_damage: int = 11,
            max_turns: int = 50, verbose: bool = False,
            players: int = 1, scale_enemy: Optional[bool] = None) -> Result:
-    """Run one fight to the end and return the result.
-
-    CO-OP: `players` is 1-4. Every living hero acts in seat order each turn,
-    each driven by the same `policy` -- which needs no change, because a
-    policy has always been `(engine, player) -> card`, and it is handed
-    whichever player is currently acting.
-
-    `scale_enemy` defaults to None = "on when there is more than one hero",
-    because without it co-op is a walkover: the dummy hits ONE target, so
-    incoming damage per hero falls as 1/n while party HP grows as n. Pass
-    True/False to force it.
-
-    CO-OP IS NOT TUNED THE WAY SOLO IS, and it would be dishonest to imply
-    otherwise. Solo's numbers were swept until the policies separated; co-op
-    has a much narrower band and the ordering does not survive it. Measured
-    over 80 seeds per arm, with HP scaling on:
-
-        players  enemy dmg   aggressive   greedy   random
-           2         11          10%        100%     100%
-           2         13          10%         80%      80%   <- a real spread
-           3         16           0%         26%      75%   <- greedy INVERTS
-           4         22          56%          0%      21%   <- so does the order
-
-    That inversion is a real finding, not noise: against a big scaled enemy
-    the fight outlasts `max_turns`, so turtling loses to the clock and racing
-    wins. `greedy` stops being the right baseline somewhere around 3 players.
-    If you want a learnable co-op task, tune `enemy_hp`/`enemy_damage` for
-    your party size -- config.json's `simple` section exists for exactly that.
-
-    This is the whole turn structure, and it is the same cycle play.py and
-    env.py drive:
-
-        start_player_turn()   draw 5, refill energy, clear block
-        ... play cards ...    until the policy stops or nothing is playable
-        end_player_turn()     discard the hand, end-of-turn effects
-        run_enemy_turn()      the enemy acts
-
-    `max_turns` is a safety cap, not a rule: a fight that hits it is a finding
-    (a policy that never kills anything), not a normal outcome.
-
-    THE DEFAULTS ARE TUNED, not arbitrary. The obvious numbers (50 hp vs a
-    40 hp enemy hitting for 8) make every policy win 200/200 -- including a
-    random one -- which is useless to train against: no gradient, nothing to
-    learn, and no way to tell a good policy from a bad one. Measured over 150
-    seeds per arm, these defaults give:
-
-        aggressive (never blocks)     0%
-        random                       61%
-        greedy (blocks when hurt)    80%
-
-    Blocking is now load-bearing, random is beatable, and there is headroom
-    above the scripted baseline. Pass your own numbers to make it easier or
-    harder -- `battle(greedy, player_hp=50, enemy_hp=40, enemy_damage=8)` is
-    the trivial version if you just want to watch the loop run.
-    """
+    """Run one fight to the end and return the result."""
     if scale_enemy is None:
         scale_enemy = players > 1
-    seed_content(seed)          # pins the enemy's HP roll; see entities.py
+    seed_content(seed)
     party = make_party(players, player_hp, energy)
     enemy = make_dummy(enemy_hp, enemy_damage)
 
@@ -227,20 +117,15 @@ def battle(policy: Callable = greedy, seed: Optional[int] = None,
         if verbose:
             _show(engine, party, enemy, turns)
 
-        # Each living hero takes their sub-turn in seat order. A downed one is
-        # skipped rather than ending the fight -- the engine only calls defeat
-        # once EVERY player is down, so a survivor can still finish the job.
         for player in engine.players:
             if not player.alive or engine.is_over:
                 continue
-            # Play cards until the policy declines. Bounded, so a policy that
-            # keeps returning an unplayable card cannot spin forever.
             for _ in range(20):
                 card = policy(engine, player)
                 if card is None:
                     break
                 if not engine.play_card(player, card, target=enemy):
-                    break       # engine refused it -- stop rather than retry
+                    break
                 if verbose:
                     print("    {} plays {:<7} -> enemy {} hp, block {}".format(
                         player.name, card.name, enemy.hp, player.block))
@@ -271,45 +156,12 @@ def _show(engine, party, enemy, turn):
             or "(empty)"))
 
 
-# --- a tiny RL environment -------------------------------------------------
-# The full CombatEnv is 181 actions and 817 observation floats. This is 3 and
-# 7. Same engine underneath, so a policy that works here is solving a real
-# (if small) slice of the game -- worth getting right before scaling up.
-
 PLAY_STRIKE, PLAY_DEFEND, END_TURN = 0, 1, 2
 ACTION_NAMES = ("strike", "defend", "end turn")
 
 
 class SimpleEnv(object):
-    """Gym-style env over the same battle. 3 actions; 7 observation floats
-    solo, plus 2 per teammate in co-op.
-
-        env = SimpleEnv(seed=0)              # solo: 7 floats
-        env = SimpleEnv(players=3, seed=0)   # co-op: 7 + 2x2 = 11 floats
-        obs = env.reset()
-        obs, reward, done, info = env.step(action)
-
-    Observation, all roughly 0-1:
-        0 your hp        3 incoming damage next enemy turn
-        1 your block     4 Strikes in hand
-        2 enemy hp       5 Defends in hand
-                         6 energy
-        then per teammate, in the order described below:
-        +0 their hp      +1 their block
-
-    EGOCENTRIC, exactly like the full CombatEnv: slot 0 is whoever is acting
-    right now, and teammates follow in wrapped seat order. A single shared
-    policy can therefore read its OWN hp at a fixed place -- which is the
-    whole reason the big env was rotated too.
-
-    SOLO IS UNCHANGED AT 7 FLOATS, deliberately. A saved agent trained before
-    co-op existed still loads and runs. Ask for players>1 and the observation
-    grows; ask the env for its size rather than hardcoding 7.
-
-    CO-OP TURN ORDER mirrors CombatEnv: heroes act one at a time in sequence,
-    END_TURN passes to the next, and the enemy acts only once everyone has
-    had their sub-turn.
-    """
+    """Gym-style env over the same battle. 3 actions; 7 observation floats solo, plus 2 per teammate in..."""
 
     def __init__(self, seed=None, player_hp=30, energy=3,
                  enemy_hp=75, enemy_damage=11, max_turns=50,
@@ -323,14 +175,12 @@ class SimpleEnv(object):
         self.enemy_damage = enemy_damage
         self.max_turns = max_turns
         self.n_players = players
-        # None = on when there is more than one hero; see battle().
         self.scale_enemy = (players > 1) if scale_enemy is None else scale_enemy
         self.active_idx = 0
         self.engine = None
 
     def observation_size(self):
-        """7 for solo, +2 per teammate. Read this instead of hardcoding a
-        number -- the trainer does."""
+        """7 for solo, +2 per teammate."""
         return 7 + 2 * (self.n_players - 1)
 
     def reset(self, seed=None):
@@ -344,11 +194,9 @@ class SimpleEnv(object):
         self.active_idx = 0
         return self._observe()
 
-    # ---- whose turn is it ----
     @property
     def player(self):
-        """The acting hero. Named `player` so every solo caller written
-        before co-op keeps working unchanged."""
+        """The acting hero."""
         if self.engine is None:
             return None
         idx = min(self.active_idx, len(self.engine.players) - 1)
@@ -361,8 +209,7 @@ class SimpleEnv(object):
         return players[idx:] + players[:idx]
 
     def _advance(self):
-        """Hand the sub-turn to the next hero; resolve the round after the
-        last one. Mirrors CombatEnv._advance_sub_turn."""
+        """Hand the sub-turn to the next hero; resolve the round after the last one."""
         engine = self.engine
         self.active_idx += 1
         if self.active_idx >= len(engine.players):
@@ -392,17 +239,13 @@ class SimpleEnv(object):
             defends / 5.0,
             me.energy / max(1, me.max_energy),
         ]
-        # Teammates: hp and block only. Enough to answer "does anyone need me
-        # to tank for them", without doubling the vector.
         for mate in order[1:]:
             obs.append(mate.hp / max(1, mate.max_hp))
             obs.append(min(mate.block, 20) / 20.0)
         return obs
 
     def legal_actions(self):
-        """END_TURN is always legal; the two card actions only when the
-        ACTING hero holds that card and can afford it. Same source of truth
-        as the full env -- the engine's own playable_cards."""
+        """END_TURN is always legal; the two card actions only when the ACTING hero holds that card and can..."""
         legal = [False, False, True]
         if self.engine is None or self.engine.is_over:
             return legal
@@ -430,7 +273,7 @@ class SimpleEnv(object):
             card = next((c for c in engine.playable_cards(me)
                          if c.name == wanted), None)
             if card is None:
-                reward -= 1.0            # illegal: mask it and this never fires
+                reward -= 1.0
             else:
                 before = self.enemy.hp
                 engine.play_card(me, card, target=self.enemy)
@@ -447,20 +290,12 @@ class SimpleEnv(object):
                  "acting": self.active_idx})
 
 
-# --- play it yourself ------------------------------------------------------
-# The input plumbing is imported from play.py rather than rewritten: ask()
-# turns Ctrl+C and Ctrl+D into a clean quit instead of a traceback, which took
-# a real bug to get right (14 unguarded input() sites, only 2 of them
-# guarded). Same reasoning as the engine -- do not keep a second copy.
-
 SIMPLE_COMMANDS = (
     ("<#>", "play that card"), ("e", "end turn"), ("n", "next hero"),
     ("s", "switch hero"), ("a", "all hands"),
     ("d", "draw pile"), ("p", "discard pile"), ("?", "help"), ("q", "quit"),
 )
 
-# Only meaningful with a party. Solo hides them rather than offering keys
-# that answer "there is nobody else".
 COOP_ONLY = ("n", "s", "a")
 
 
@@ -480,8 +315,6 @@ def _render(engine, player, enemy):
                                       enemy.current_move.damage)
     print("  Dummy   {}   Intent: {}".format(
         hp_bar(enemy.hp, enemy.max_hp), intent))
-    # Every hero, with "->" marking whose turn it is. In solo there is only
-    # one line and the marker is harmless.
     for member in engine.players:
         mark = "->" if member is player else "  "
         state = "" if member.alive else "   (down)"
@@ -513,13 +346,7 @@ def _show_pile(cards, label):
 
 
 def _show_all_hands(engine, active):
-    """Every hero's hand at once, so you can plan the round before spending.
-
-    Cards are listed with the index you would type AFTER switching to that
-    hero -- indices are per-hand, not global, exactly as _render() shows
-    them. 'x' marks a card that hero cannot currently afford, asked of the
-    engine per hero because each has their own energy.
-    """
+    """Every hero's hand at once, so you can plan the round before spending."""
     from testing.play import hp_bar
     print()
     print("  All hands:")
@@ -542,12 +369,7 @@ def _show_all_hands(engine, active):
 
 
 def _pick_hero(engine, active, arg, ask, QuitGame):
-    """Resolve 's' / 's2' to a seat index, or None if the pick was no good.
-
-    Accepts the number inline ('s2') so the common case is one keystroke
-    pair, and falls back to a prompt for a bare 's'. Numbering shown to the
-    player is 1-based to match the "Hero 2" labels; the return is 0-based.
-    """
+    """Resolve 's' / 's2' to a seat index, or None if the pick was no good."""
     living = [i for i, m in enumerate(engine.players) if m.alive]
     if not arg:
         print("  " + "   ".join(
@@ -570,15 +392,7 @@ def _pick_hero(engine, active, arg, ask, QuitGame):
 
 
 def _take_sub_turn(engine, player, enemy, ask, QuitGame):
-    """One hero's sub-turn at the keyboard.
-
-    Returns who should act next:
-      "end"  -- end the whole ROUND ('e'); the enemy phase runs
-      "next" -- pass to the next hero in seat order ('n')
-      <int>  -- a seat index the player jumped to explicitly ('s2')
-
-    Solo only ever sees "end" -- with one hero the next sub-turn is the next
-    round, so 'n'/'s' are not offered at all."""
+    """One hero's sub-turn at the keyboard."""
     solo = len(engine.players) == 1
     prompt = "  {}> ".format(player.name)
     while True:
@@ -604,11 +418,11 @@ def _take_sub_turn(engine, player, enemy, ask, QuitGame):
                                 ask, QuitGame)
             if picked is None:
                 continue
-            return picked                 # jump straight to that hero
+            return picked
         if choice == "n" and not solo:
-            return "next"                 # pass to the next hero
+            return "next"
         if choice in ("e", ""):
-            return "end"                  # end the round for everyone
+            return "end"
         if not choice.isdigit() or int(choice) >= len(player.hand):
             print("  no such card -- pick a number from {}'s hand, "
                   "'e' to end the turn{}".format(
@@ -617,8 +431,6 @@ def _take_sub_turn(engine, player, enemy, ask, QuitGame):
             continue
 
         card = player.hand[int(choice)]
-        # The engine's own answer, not a second opinion. If it says no, it
-        # says WHY -- same string play.py and the RL mask use.
         refusal = engine.why_not_playable(player, card)
         if refusal is not None:
             print("  can't: {}".format(refusal))
@@ -631,21 +443,7 @@ def play_interactive(seed: Optional[int] = None, player_hp: int = 30,
                      energy: int = 3, enemy_hp: int = 75,
                      enemy_damage: int = 11, max_turns: int = 50,
                      players: int = 1, scale_enemy: Optional[bool] = None):
-    """Play one fight yourself, in the terminal.
-
-    Same engine, same cards, same turn cycle as battle() -- this only swaps
-    the policy function for a person at a keyboard.
-
-    CO-OP: with players>1 each hero takes a sub-turn in seat order, and the
-    header marks whose it is with "->". Type `n` to pass to the next hero
-    without ending the whole party's turn -- `e` still ends the round for
-    everyone, which is the distinction play.py's "Whose turn?" menu makes
-    too.
-
-    Seat order is only the default. `s2` jumps straight to Hero 2 and can go
-    backwards, so you can open with the hero whose hand you have seen -- `a`
-    shows every hand at once for exactly that. This is play.py's free-pick
-    model; `n` is kept as the one-key shorthand for the common case."""
+    """Play one fight yourself, in the terminal."""
     from testing.play import QuitGame, ask
 
     if scale_enemy is None:
@@ -672,10 +470,6 @@ def play_interactive(seed: Optional[int] = None, player_hp: int = 30,
     try:
         while not engine.is_over and turns < max_turns:
             turns += 1
-            # Heroes act in seat order by default, but 's<N>' can jump to any
-            # living one, so this walks an index instead of a for-loop.
-            # Falling off the end still ends the round, which is exactly what
-            # 'n' on the last hero has always done.
             active = 0
             while active < len(engine.players) and not engine.is_over:
                 player = engine.players[active]
@@ -685,14 +479,11 @@ def play_interactive(seed: Optional[int] = None, player_hp: int = 30,
                 _render(engine, player, enemy)
                 nxt = _take_sub_turn(engine, player, enemy, ask, QuitGame)
                 if nxt == "end":
-                    break                     # 'e' ends the round for everyone
+                    break
                 active = active + 1 if nxt == "next" else nxt
             if engine.is_over:
                 break
 
-            # Marked HERE, not at the top of the turn: your own card plays are
-            # already rendered live as you make them, so replaying them would
-            # just be noise. Everything after this point is the enemy phase.
             log_seen = len(engine.log)
             engine.end_player_turn()
             if not engine.is_over:
@@ -720,8 +511,6 @@ def play_interactive(seed: Optional[int] = None, player_hp: int = 30,
     return Result(engine.victory, turns,
                   [m.hp for m in engine.players], enemy.hp, engine.log)
 
-
-# --- demo ------------------------------------------------------------------
 
 def _demo():
     print("=" * 62)
@@ -764,9 +553,6 @@ def _demo():
 
 
 if __name__ == "__main__":
-    # Setup comes from config.json's `simple` section, so a UI can point this
-    # at a party size and enemy without editing code. Missing file or missing
-    # section -> the solo defaults, exactly as before configs existed.
     from testing import config as _config
 
     _argv = [a for a in _sys.argv[1:] if not a.startswith("-")]

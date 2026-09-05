@@ -1,0 +1,17 @@
+# --- Python ----------------------------------------------------------------
+# Bytecode is regenerated on import, so it never belongs in the repo.
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# --- Editors / OS junk -----------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

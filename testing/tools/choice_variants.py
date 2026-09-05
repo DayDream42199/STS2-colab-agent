@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Which choice heuristic actually beats random?
-
-The first attempt (damage+block, Powers +12, min for exhaust) LOST to
-random by 4pp. Rather than guess at why, this scores several resolvers on
-the same decks and seeds, and isolates which PROMPT KIND is responsible by
-running each kind greedily with everything else random.
-"""
+"""Which choice heuristic actually beats random?"""
 import sys, io, contextlib
 import os
 import sys
@@ -35,9 +29,7 @@ def value_plain(card):
 
 
 def value_per_energy(card):
-    """Same, but per point of energy. greedy_policy has 3 energy a turn and
-    plays ONE card per decision, so a 3-cost bomb it can only cast alone is
-    not obviously better than two cheap cards."""
+    """Same, but per point of energy. greedy_policy has 3 energy a turn and plays ONE card per..."""
     if card.card_type in (CardType.STATUS, CardType.CURSE):
         return -100.0
     cost = card.cost if isinstance(card.cost, int) else 3
@@ -59,8 +51,7 @@ def make_resolver(value_fn, kinds=None):
 
 
 def junk_only(engine, player, options, prompt, kind):
-    """Only act on prompts where the right answer is unambiguous: throw away
-    a Status or Curse if one is on offer, otherwise defer to random."""
+    """Only act on prompts where the right answer is unambiguous: throw away a Status or Curse if one..."""
     if kind in ("exhaust", "transform"):
         junk = [c for c in options
                 if c.card_type in (CardType.STATUS, CardType.CURSE)]
@@ -87,9 +78,7 @@ SHED = {"exhaust", "transform", "stash"}
 
 
 def make_resolver2(value_fn, kinds=None):
-    """As make_resolver, but with `stash` (Thinking Ahead) counted as a
-    SHED prompt -- it takes a card out of your hand, so you want the worst
-    one, the opposite of Headbutt's to_draw_top."""
+    """As make_resolver, but with `stash` (Thinking Ahead) counted as a SHED prompt -- it takes a card..."""
     def resolver(engine, player, options, prompt, kind):
         if kinds is not None and kind not in kinds:
             return player.rng.choice(options)

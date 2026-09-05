@@ -1,67 +1,4 @@
-"""
-Relic model + a real Ironclad-relevant relic pool, sourced from the wiki
-the same way cards/enemies were: `slaythespire.wiki.gg`'s Relics_List page
-(Common/Uncommon/Rare tiers, plus Ironclad's 3 Rare class relics).
-
-Deliberately NOT ported -- these need systems this replica doesn't have,
-or a card-effect-pipeline change risky to bolt on after the fact (see
-README's known gaps for the full list): Gold/Shop/Rest-Site/Potion-tied
-relics, map-"?"-room relics, Elite/Boss-only triggers (no elites/bosses
-yet), other classes' resource systems (Focus/Channel/Orbs, Star,
-Necrobinder Energy, Ethereal/Retained/Shiv/Colorless-card mechanics),
-Doom/Souls (statuses not modeled -- Thorns used to be on this list and
-is now implemented, which is what let Bronze Scales in), interactive-choice relics
-(Gambling Chip -- no UI hook for a relic to prompt mid-trigger), relics
-needing a temporary/turn-scoped cost override on an EXISTING deck card
-(Mummified Hand -- Vexing Puzzlebox is fine, see below, because its card
-is a disposable one-off that never enters deck_template), a relic that
-changes the fundamental "energy resets to max each turn" rule (Ice
-Cream), and relics whose effect depends on knowing exactly which
-debuff/how-much a just-played card applied generically (Unsettling
-Lamp, Razor Tooth) or on a "card creation" trigger source that doesn't
-exist yet (Regalite). Circlet (the "own every other relic" relic) and
-the Ancient/Neow tier are also out of scope.
-
-Hook points on Relic, all optional:
-- on_pickup(player): fires once, the instant the relic is granted.
-- on_turn_start(engine, player, turn_number): fires at the start of
-  EVERY turn, for every combat the owner enters -- from inside
-  CombatEngine.start_player_turn(), AFTER that turn's own start_turn()
-  has already reset Block/energy and drawn the hand, and after any
-  pending_relic_block/draw/energy from a PREVIOUS turn's relic promise
-  has been resolved. Firing before start_player_turn() (e.g. from
-  CombatEngine.__init__) would have Block/hand-size relics silently
-  wiped, since start_turn() unconditionally resets both every turn,
-  turn 1 included. Each relic's own callback checks turn_number for
-  "start of combat" (==1), "start of your 2nd/3rd turn" (==2/==3), or
-  "every N turns" (% N == 0) semantics -- one hook point serves all of
-  them rather than needing a separate hook per timing pattern.
-- on_turn_end(engine, player): fires once per living player at the end
-  of their turn (from CombatEngine.end_player_turn(), after
-  Player.end_turn() has already applied Metallicize/Plated Armor and
-  status decay).
-- on_combat_end(engine, player): fires once, when the fight is WON, for
-  players still alive at that point. A player who died mid-fight relies
-  on run_gauntlet's separate revive-at-1-HP mechanic, not this --
-  healing a 0-HP corpse without reviving them would leave inconsistent
-  state (hp > 0 but alive == False), so combat.py only fires this for
-  the living.
-- on_card_added(player, card): fires once, from play.py's
-  offer_card_reward, right after a picked card is appended to
-  deck_template (i.e. when a card is genuinely added to the deck, not
-  just drawn/played).
-
-Generic relic-driven Player state (see entities.py's Player.__init__):
-relic_counters (whole-run, persists across fights -- e.g. Book of Five
-Rings' running count, Lizard Tail's one-time-ever flag), and five
-per-combat fields reset in start_combat(): pending_relic_block/draw/
-energy (a promise resolved at the START of the NEXT turn -- see
-start_player_turn()), flat_damage_reduction (Tungsten Rod), and
-next_attack_bonus_damage/next_attack_double (consumed directly inside
-Entity.deal_attack_damage -- Akabeko's Vigor, Pen Nib's 10th-attack
-double). These are generic precisely so most relics below don't need
-their own bespoke Player field.
-"""
+"""Relic model + a real Ironclad-relevant relic pool, sourced from the wiki the same way..."""
 
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -83,18 +20,8 @@ class Relic:
     on_card_added: Optional[Callable] = None
 
 
-# ---------------------------------------------------------------------------
-# Small helpers for the three recurring reactive-hook patterns below, so
-# each individual relic function stays a one-liner instead of re-deriving
-# the same closure/counter bookkeeping. All three must be CALLED FROM an
-# on_turn_start(turn_number == 1) callback so a fresh closure (and thus
-# fresh counter/flag state) is created every combat -- that's what makes
-# sharing one static Relic instance across players/picks safe.
-# ---------------------------------------------------------------------------
-
 def _register_once_per_combat(player, event, effect):
-    """`effect(engine, player, **kwargs)` fires the first time `event`
-    fires this combat, then goes quiet for the rest of the fight."""
+    """`effect(engine, player, **kwargs)` fires the first time `event` fires this combat, then goes..."""
     fired = {"done": False}
 
     def _cb(engine, player, **kwargs):
@@ -107,9 +34,7 @@ def _register_once_per_combat(player, event, effect):
 
 
 def _register_every_n_per_turn(player, event, n, effect):
-    """`effect(engine, player)` fires every Nth time `event` fires WITHIN
-    THE CURRENT TURN, resetting to 0 whenever a new turn is detected --
-    matches "every time you play N Attacks in a single turn"-style relics."""
+    """`effect(engine, player)` fires every Nth time `event` fires WITHIN THE CURRENT TURN, resetting..."""
     state = {"count": 0, "turn": 0}
 
     def _cb(engine, player, **kwargs):
@@ -125,9 +50,7 @@ def _register_every_n_per_turn(player, event, n, effect):
 
 
 def _register_every_n_per_combat(player, event, n, effect):
-    """Same as above but counts across the WHOLE combat, no per-turn
-    reset -- matches "every time you play N Attacks" (no "in a single
-    turn" qualifier)."""
+    """Same as above but counts across the WHOLE combat, no per-turn reset -- matches "every time you..."""
     state = {"count": 0}
 
     def _cb(engine, player, **kwargs):
@@ -138,10 +61,6 @@ def _register_every_n_per_combat(player, event, n, effect):
 
     player.register_hook(event, _cb)
 
-
-# ---------------------------------------------------------------------------
-# Ironclad's real starting relic (always granted, not a reward pool pick)
-# ---------------------------------------------------------------------------
 
 def _burning_blood_end(engine, player):
     before = player.hp
@@ -155,10 +74,6 @@ BURNING_BLOOD = Relic(
     on_combat_end=_burning_blood_end,
 )
 
-
-# ---------------------------------------------------------------------------
-# Common
-# ---------------------------------------------------------------------------
 
 def _blood_vial_start(engine, player, turn_number):
     if turn_number != 1:
@@ -220,10 +135,6 @@ def _festive_popper_start(engine, player, turn_number):
     for e in engine.enemies:
         if e.alive:
             dmg = player.deal_attack_damage(9)
-            # The only relic in this file modeled as a real ATTACK (it runs
-            # through deal_attack_damage and lets the target's Vulnerable
-            # apply), so it passes an attacker and can eat Thorns. The rest
-            # pass source_is_attack=False and deliberately do not.
             e.take_damage(dmg, log=engine.log, label="Festive Popper", attacker=player)
 
 
@@ -278,15 +189,6 @@ def _red_mask_start(engine, player, turn_number):
     engine.log.append("ALL enemies gain 1 Weak (Red Mask)")
 
 
-# These two are the only random on_pickup effects, and pickup is the one
-# hook point that can fire BEFORE the player has ever entered a combat --
-# add_relic() is callable the moment a Player exists. player.rng is created
-# in Player.__init__ but only SEEDED by start_combat(), so a pickup on a
-# brand-new Player draws from system entropy and is not reproducible. That
-# is still strictly better than the global module (the draw is at least
-# confined to one player's stream), and every real caller -- play.py's
-# reward flow, bench's tier builder -- picks relics up between fights, by
-# which point the rng is seeded.
 def _war_paint_pickup(player):
     skills = [c for c in player.deck_template if c.card_type == CardType.SKILL and not c.upgraded]
     for c in player.rng.sample(skills, k=min(2, len(skills))):
@@ -298,10 +200,6 @@ def _whetstone_pickup(player):
     for c in player.rng.sample(attacks, k=min(2, len(attacks))):
         c.upgrade()
 
-
-# ---------------------------------------------------------------------------
-# Uncommon
-# ---------------------------------------------------------------------------
 
 def _akabeko_start(engine, player, turn_number):
     if turn_number != 1:
@@ -516,10 +414,6 @@ def _twisted_funnel_start(engine, player, turn_number):
     engine.log.append("ALL enemies gain 4 Poison (Twisted Funnel)")
 
 
-# ---------------------------------------------------------------------------
-# Rare (general pool)
-# ---------------------------------------------------------------------------
-
 def _art_of_war_start(engine, player, turn_number):
     if turn_number != 1:
         return
@@ -537,10 +431,7 @@ def _art_of_war_end(engine, player):
 
 
 def _beating_remnant_start(engine, player, turn_number):
-    """player.lost_hp_this_turn only tracks lose_hp()-sourced losses (self-
-    inflicted card costs like Blood Wall), NOT take_damage()-sourced combat
-    damage -- the exact case this relic exists for. Tracks its own total
-    via the hp_lost hook instead, which fires for both sources."""
+    """player.lost_hp_this_turn only tracks lose_hp()-sourced losses (self- inflicted card costs like..."""
     if turn_number == 1:
         def _track(engine, player, **kwargs):
             player.relic_counters["_hp_lost_this_turn_br"] = \
@@ -729,14 +620,10 @@ def _vexing_puzzlebox_start(engine, player, turn_number):
         return
     factory = player.rng.choice(CARD_POOL_IRONCLAD)
     card = factory()
-    card.cost = 0  # disposable one-off instance, never enters deck_template
+    card.cost = 0
     player.add_to_hand(card)
     engine.log.append(f"{player.name} adds {card.name} (free this turn) to their Hand (Vexing Puzzlebox)")
 
-
-# ---------------------------------------------------------------------------
-# Rare -- Ironclad class relics
-# ---------------------------------------------------------------------------
 
 def _charons_ashes_start(engine, player, turn_number):
     if turn_number != 1:
@@ -751,12 +638,7 @@ def _charons_ashes_start(engine, player, turn_number):
 
 
 def _demon_tongue_start(engine, player, turn_number):
-    """Doesn't use _register_once_per_combat: that helper marks itself
-    'fired' on the very first hp_lost event regardless of source, which
-    would swallow the real (source='self') trigger if an attack-sourced
-    hp_lost happened to fire first. The 'first time' here must mean the
-    first EFFECTIVE (self-sourced) trigger, so this tracks its own flag,
-    only set once the source filter actually passes."""
+    """Doesn't use _register_once_per_combat: that helper marks itself 'fired' on the very first..."""
     if turn_number != 1:
         return
     fired = {"done": False}
@@ -774,14 +656,7 @@ def _demon_tongue_start(engine, player, turn_number):
 
 
 def _ruined_helmet_start(engine, player, turn_number):
-    """Doesn't use _register_once_per_combat, for the same reason as
-    Demon Tongue: it would mark itself 'fired' on the first status_gained
-    event of ANY kind (e.g. Dexterity from Oddly Smooth Stone), not just
-    the first Strength gain, permanently blocking the real trigger. The
-    'fired' flag must be set BEFORE calling add_status(STRENGTH, ...)
-    below, too -- that call itself re-fires status_gained(STRENGTH),
-    and without the flag already set that reentrant call would try to
-    double a second time."""
+    """Doesn't use _register_once_per_combat, for the same reason as Demon Tongue: it would mark itself..."""
     if turn_number != 1:
         return
     fired = {"done": False}
@@ -797,31 +672,6 @@ def _ruined_helmet_start(engine, player, turn_number):
 
     player.register_hook("status_gained", _effect)
 
-
-# ---------------------------------------------------------------------------
-# Reward pool -- real relics, wiki-sourced wording. Stateless (no per-owner
-# mutable fields on the Relic object itself); per-owner/per-combat state
-# lives on the Player (relic_counters, pending_relic_*, etc.) or inside
-# fresh closures created each combat, so sharing these exact instances
-# across players/picks is safe. Prayer Wheel has no callback here -- its
-# effect (an extra card-reward option) is checked directly in play.py's
-# offer_card_reward, since it changes the SHAPE of a reward screen rather
-# than doing anything mid-combat.
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# The stale-exclusion batch. Each of these was on the "deliberately excluded"
-# list for a feature the engine didn't have. It has them all now:
-#   set_temp_cost      -> Mummified Hand
-#   upgrade_for_combat -> Razor Tooth
-#   vulnerable_damage_bonus (built for Cruelty) -> Paper Phrog
-#   _register_every_n_per_turn -> Shuriken
-#   status_applied hook (built for Vicious) -> Unsettling Lamp
-#   card_damage_bonus  -> Strike Dummy, Miniature Cannon
-# The other three needed only a Player field. The exclusion list had simply
-# not been revisited since those landed.
-# ---------------------------------------------------------------------------
 
 def _red_skull_start(engine, player, turn_number):
     if turn_number != 1:
@@ -842,10 +692,7 @@ def _ice_cream_start(engine, player, turn_number):
 
 
 def _paper_phrog_start(engine, player, turn_number):
-    """"Enemies with Vulnerable take 75% more damage rather than 50%."
-    Vulnerable's own 50% is applied in damage_multiplier_for_defender, and
-    vulnerable_damage_bonus (added for the Cruelty card) stacks on top of
-    it -- so this is the +25% difference, not 75%."""
+    """"Enemies with Vulnerable take 75% more damage rather than 50%." Vulnerable's own 50% is applied..."""
     if turn_number != 1:
         return
     player.vulnerable_damage_bonus += 0.25
@@ -862,10 +709,7 @@ def _shuriken_start(engine, player, turn_number):
 
 
 def _razor_tooth_start(engine, player, turn_number):
-    """"Every time you play an Attack or Skill, Upgrade it for the remainder
-    of combat." Routed through upgrade_for_combat so it reverts at combat
-    end -- a bare card.upgrade() would make it permanent, the deck_template
-    aliasing trap that Armaments was silently falling into."""
+    """"Every time you play an Attack or Skill, Upgrade it for the remainder of combat." Routed through..."""
     if turn_number != 1:
         return
 
@@ -878,9 +722,7 @@ def _razor_tooth_start(engine, player, turn_number):
 
 
 def _mummified_hand_start(engine, player, turn_number):
-    """"Whenever you play a Power, a random card in your Hand is free to
-    play that turn." Needs a turn-scoped cost override on an EXISTING deck
-    card, which is exactly what set_temp_cost was built for."""
+    """"Whenever you play a Power, a random card in your Hand is free to play that turn." Needs a..."""
     if turn_number != 1:
         return
 
@@ -895,10 +737,7 @@ def _mummified_hand_start(engine, player, turn_number):
 
 
 def _unsettling_lamp_start(engine, player, turn_number):
-    """"Each combat, the first time you play a card that Debuffs an enemy,
-    double its effect." Uses the applier-side status_applied event added for
-    Vicious; doubling = applying the same amount a second time. The re-entry
-    guard matters, or the second application would trigger the hook again."""
+    """"Each combat, the first time you play a card that Debuffs an enemy, double its effect." Uses the..."""
     if turn_number != 1:
         return
     state = {"used": False, "busy": False}
@@ -919,9 +758,7 @@ def _unsettling_lamp_start(engine, player, turn_number):
 
 
 def _gambling_chip_start(engine, player, turn_number):
-    """"At the start of each combat, discard any number of cards then draw
-    that many." No UI for the choice, so it discards the whole hand and
-    redraws -- the same auto-pick the Gambler's Brew potion already uses."""
+    """"At the start of each combat, discard any number of cards then draw that many." No UI for the..."""
     if turn_number != 1:
         return
     n = len(player.hand)
@@ -933,7 +770,6 @@ def _gambling_chip_start(engine, player, turn_number):
     engine.log.append(f"{player.name} redraws {n} cards (Gambling Chip)")
 
 RELIC_POOL_IRONCLAD = [
-    # Common
     Relic("Blood Vial", "Common", "At the start of each combat, heal 2 HP.",
           on_turn_start=_blood_vial_start),
     Relic("Anchor", "Common", "Start each combat with 10 Block.",
@@ -969,7 +805,6 @@ RELIC_POOL_IRONCLAD = [
     Relic("Whetstone", "Common", "Upon pickup, Upgrade 2 random Attacks.",
           on_pickup=_whetstone_pickup),
 
-    # Uncommon
     Relic("Akabeko", "Uncommon", "At the start of each combat, gain 8 Vigor.",
           on_turn_start=_akabeko_start),
     Relic("Candelabra", "Uncommon", "At the start of your 2nd turn, gain 2 Energy.",
@@ -1015,7 +850,6 @@ RELIC_POOL_IRONCLAD = [
     Relic("Twisted Funnel", "Uncommon", "At the start of each combat, apply 4 Poison to ALL enemies.",
           on_turn_start=_twisted_funnel_start),
 
-    # Rare
     Relic("Art of War", "Rare", "If you do not play any Attacks during your turn, gain an additional Energy next turn.",
           on_turn_start=_art_of_war_start, on_turn_end=_art_of_war_end),
     Relic("Beating Remnant", "Rare", "You cannot lose more than 20 HP in a single turn.",
@@ -1060,7 +894,6 @@ RELIC_POOL_IRONCLAD = [
     Relic("Vexing Puzzlebox", "Rare", "At the start of each combat, add a random card into your Hand. It's free to play this turn.",
           on_turn_start=_vexing_puzzlebox_start),
 
-    # Rare -- Ironclad
     Relic("Charon's Ashes", "Rare (Ironclad)", "Whenever you Exhaust a card, deal 3 damage to ALL enemies.",
           on_turn_start=_charons_ashes_start),
     Relic("Demon Tongue", "Rare (Ironclad)", "The first time you lose HP on your turn, heal HP equal to the amount lost.",
@@ -1069,13 +902,6 @@ RELIC_POOL_IRONCLAD = [
           on_turn_start=_ruined_helmet_start),
 ]
 
-
-# ---------------------------------------------------------------------------
-# Potion-tied relics -- skipped in the first relics pass (no potions.py
-# existed yet), added once the potion system landed. Tiny Mailbox
-# ("whenever you Rest, procure 2 random Potions") stays out of scope --
-# still needs a Rest Site system this replica doesn't have.
-# ---------------------------------------------------------------------------
 
 def _potion_belt_pickup(player):
     player.potion_slots += 2
@@ -1107,28 +933,12 @@ RELIC_POOL_IRONCLAD += [
           on_turn_start=_petrified_toad_start),
     Relic("Reptile Trinket", "Uncommon", "Whenever you use a Potion, gain 3 Strength this turn.",
           on_turn_start=_reptile_trinket_start),
-    # White Beast Statue's effect ("Potion always appear in combat rewards")
-    # is already this replica's DEFAULT behavior -- offer_potion_reward()
-    # in play.py always offers one (gated only by slot capacity, not
-    # chance), same as card/relic rewards. No callback needed; owning this
-    # relic currently changes nothing observable, which is worth being
-    # honest about rather than inventing a "sometimes no potion" baseline
-    # just to make the relic meaningful.
     Relic("White Beast Statue", "Rare", "Potion always appear in combat rewards."),
 ]
 
 
-# ---------------------------------------------------------------------------
-# Elite/boss-triggered relics -- previously unportable because nothing in the
-# engine could tell an elite or boss apart from a normal monster (the
-# distinction lived only in play.py's menu labels). Enemy.category and
-# CombatEngine.has_enemy_category() now make it queryable.
-# ---------------------------------------------------------------------------
-
 def _pantograph_start(engine, player, turn_number):
-    """Wiki: "At the start of each Boss combat, heal 25 HP." Fires on turn 1
-    only -- "start of combat" in this engine means the first start_player_turn,
-    for the ordering reasons in this module's docstring."""
+    """Wiki: "At the start of each Boss combat, heal 25 HP." Fires on turn 1 only -- "start of combat"..."""
     if turn_number != 1 or not engine.has_enemy_category("boss"):
         return
     before = player.hp
@@ -1137,9 +947,7 @@ def _pantograph_start(engine, player, turn_number):
 
 
 def _book_of_five_rings_added(player, card):
-    """Wiki: "Every 5 cards you add to your Deck, heal 20 HP." Counter lives
-    in relic_counters, which persists for the whole run (not per combat) --
-    cards added across different fights accumulate toward the same 5."""
+    """Wiki: "Every 5 cards you add to your Deck, heal 20 HP." Counter lives in relic_counters, which..."""
     player.relic_counters["book_of_five_rings"] = \
         player.relic_counters.get("book_of_five_rings", 0) + 1
     if player.relic_counters["book_of_five_rings"] % 5 == 0:
@@ -1151,11 +959,7 @@ RELIC_POOL_IRONCLAD += [
           on_card_added=_book_of_five_rings_added),
     Relic("Pantograph", "Uncommon", "At the start of each Boss combat, heal 25 HP.",
           on_turn_start=_pantograph_start),
-    # White Star has no callback: "Elites drop an additional Rare card reward"
-    # is a REWARD-SCREEN rule, not a combat one, so it's enforced in play.py's
-    # offer_card_reward() the same way Prayer Wheel's extra pick already is.
     Relic("White Star", "Rare", "Elites drop an additional Rare card reward."),
-    # --- the stale-exclusion batch ---
     Relic("Strike Dummy", "Common", "Cards containing \"Strike\" deal 3 additional damage."),
     Relic("Red Skull", "Common (Ironclad)", "While your HP is at or below 50%, you have 3 additional Strength.",
           on_turn_start=_red_skull_start),
@@ -1179,11 +983,6 @@ RELIC_POOL_IRONCLAD += [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Stable relic ids, for env.py's observation. Same contract as
-# cards.CARD_IDS: sorted by name so the mapping is deterministic across
-# processes, and -1 for anything unrecognised rather than a KeyError.
-# ---------------------------------------------------------------------------
 ALL_RELICS = sorted({r.name for r in RELIC_POOL_IRONCLAD} | {BURNING_BLOOD.name})
 RELIC_IDS = {name: i for i, name in enumerate(ALL_RELICS)}
 TOTAL_RELIC_IDS = len(RELIC_IDS)

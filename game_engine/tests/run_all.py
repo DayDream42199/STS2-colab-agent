@@ -1,18 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Run every suite. One command instead of a hand-typed 16-item shell loop.
-
-    python tests/run_all.py            # everything
-    python tests/run_all.py env choice # just the suites whose name contains these
-    python tests/run_all.py -v         # stream each suite's own output
-
-Each suite is a standalone script that prints its own [ok]/[FAIL] lines and
-exits non-zero on failure, so this runs them as subprocesses and reports the
-exit codes. That keeps them individually runnable and readable -- the point
-of the format is that a failing check tells you what it expected, in game
-terms, without a test framework in the way.
-
-Exits non-zero if any suite fails, so it works as a pre-commit gate.
-"""
+"""Run every suite."""
 import os
 import subprocess
 import sys
@@ -20,13 +7,12 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Roughly fastest-first, and grouped: mechanics, then content, then the
-# whole-game sweeps. smoke_all is last because it is much the slowest.
 SUITES = [
     "test_thorns", "test_newcards", "test_powers", "test_relics",
     "test_potions", "test_choice", "test_handcap", "test_state_drift",
     "test_act1", "test_act2", "test_act3", "test_colorless", "test_env",
     "test_coop_view", "test_training_api", "test_deck_purity", "test_config",
+    "test_net",
     "enemy_audit", "content_audit", "audit", "smoke_all",
 ]
 
@@ -59,7 +45,6 @@ def main(argv):
     print("{}/{} passed in {:.1f}s".format(
         len(suites) - len(failed), len(suites), time.time() - t0))
 
-    # Show why, so a failure is actionable without re-running by hand.
     for name, out, err in failed:
         print("\n" + "=" * 60)
         print("FAILED: " + name)

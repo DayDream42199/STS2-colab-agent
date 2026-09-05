@@ -1,14 +1,5 @@
 # -*- coding: utf-8 -*-
-"""#45: does choosing well actually change anything?
-
-The headline benchmark barely moved, which is expected and says nothing:
-its fixed-deck column is Strike/Defend/Bash (no choice cards at all), and
-the ladder column draws 13 choice cards out of a 186-card pool, so most
-runs never see one.
-
-This isolates the effect instead: a deck built AROUND the choice cards,
-run with the random resolver (the old behaviour) against the heuristic one.
-"""
+"""#45: does choosing well actually change anything?"""
 import sys, io, contextlib
 import os
 import sys
@@ -44,8 +35,7 @@ CHOICE_FACTORIES = [factory_for(n) for n in CHOICE_CARDS]
 
 
 def build_deck(rng, choice_copies, filler):
-    """Starter deck + N choice cards + filler pool cards, so both arms
-    fight with the same deck SIZE and differ only in the resolver."""
+    """Starter deck + N choice cards + filler pool cards, so both arms fight with the same deck SIZE..."""
     deck = make_starter_deck()
     for _ in range(choice_copies):
         deck.append(rng.choice(CHOICE_FACTORIES)())
@@ -56,7 +46,7 @@ def build_deck(rng, choice_copies, filler):
 
 def run(make_enemies, seed, resolver, choice_copies, filler):
     random.seed(seed)
-    seed_content(seed)   # enemy HP has its own stream now -- see enemies.py
+    seed_content(seed)
     rng = random.Random(seed)
     p = Player("Ironclad", max_hp=80, max_energy=3,
                deck=build_deck(rng, choice_copies, filler))
@@ -82,8 +72,6 @@ def run(make_enemies, seed, resolver, choice_copies, filler):
 
 
 ENCOUNTERS = [(name, mk) for name, mk in play.ENCOUNTERS.values()]
-# A spread of real fights that the greedy policy does not already trivially
-# win or trivially lose -- a saturated encounter cannot show a difference.
 TARGETS = [(n, mk) for n, mk in ENCOUNTERS
            if n in ("Byrdonis (Elite)", "Terror Eel [UD Elite]",
                     "Skulking Colony [UD Elite]", "Mysterious Knight [Hive]",
@@ -118,7 +106,6 @@ print("-" * 78)
 print(f"{'MEAN':<34} {tot_r/len(TARGETS):>9.1f}% {tot_g/len(TARGETS):>9.1f}% "
       f"{(tot_g - tot_r)/len(TARGETS):>+7.1f}")
 
-# And the same thing on HP lost, which does not saturate.
 print()
 print("HP lost on wins (lower is better):")
 for name, mk in TARGETS[:6]:

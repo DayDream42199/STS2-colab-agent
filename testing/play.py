@@ -1,17 +1,4 @@
-"""
-play.py -- Interactive terminal client for the combat replica.
-
-Drives combat.py directly (not the RL env.py action-id interface) so a
-human can actually play a fight: see hand/HP/enemy intents as text, pick a
-card by number, pick a target if needed, end turn, repeat. Supports 1-4
-human-controlled players (coop) against a scripted Act 1 encounter. The
-player phase shows a "Whose turn?" menu each cycle so whoever's at the
-keyboard freely picks who acts next, one card at a time -- see
-choose_active_character()'s docstring for why this, not a fixed order or
-true real-time concurrency, is the closest fit for one local terminal.
-
-Run from the repo root: python testing/play.py [config.json]
-"""
+"""play.py -- Interactive terminal client for the combat replica."""
 
 import os as _os
 import sys as _sys
@@ -43,7 +30,6 @@ from game_engine.enemies import (make_nibbit, make_shrinker_beetle, make_fuzzy_w
                       make_skulking_colony, make_terror_eel,
                       make_lagavulin_matriarch, make_soul_fysh,
                       make_waterfall_giant,
-                      # --- Act 2: Hive ---
                       make_bowlbug_rock, make_bowlbug_egg, make_bowlbug_silk,
                       make_bowlbug_nectar, make_chomper, make_exoskeleton,
                       make_hunter_killer, make_louse_progenitor,
@@ -53,7 +39,6 @@ from game_engine.enemies import (make_nibbit, make_shrinker_beetle, make_fuzzy_w
                       make_decimillipede_group, make_entomancer,
                       make_infested_prism, make_the_insatiable,
                       make_knowledge_demon, make_kaiser_crab,
-                      # --- Act 3: Glory ---
                       make_devoted_sculptor, make_scroll_of_biting, make_axebot,
                       make_fabricator, make_frog_knight, make_globe_head,
                       make_owl_magistrate, make_slimed_berserker,
@@ -62,7 +47,6 @@ from game_engine.enemies import (make_nibbit, make_shrinker_beetle, make_fuzzy_w
                       make_mecha_knight, make_soul_nexus, make_knight_gang,
                       make_queen, make_test_subject, make_aeonglass,
                       make_doormaker,
-                      # --- Event-only enemies ---
                       make_the_merchant, make_battle_friend_v1,
                       make_battle_friend_v2, make_battle_friend_v3)
 from game_engine.combat import CombatEngine
@@ -70,9 +54,6 @@ from game_engine.relics import BURNING_BLOOD, RELIC_POOL_IRONCLAD
 from game_engine.entities import seed_content
 from testing import config
 
-# The active setup. main() replaces this with the loaded config.json;
-# the default keeps the module importable (bench.py, tools/ and the
-# tests all import play without ever calling main()).
 CONFIG = dict(config.DEFAULTS)
 from game_engine.potions import POTION_POOL_IRONCLAD
 
@@ -102,7 +83,6 @@ ENCOUNTERS = {
     "23": ("Twig Slime (S)", lambda: [make_twig_slime_small()]),
     "24": ("Twig Slime (M)", lambda: [make_twig_slime_medium()]),
     "25": ("Wriggler", lambda: [make_wriggler()]),
-    # --- Underdocks (the other Act 1 region) ---
     "26": ("Calcified Cultist [UD]", lambda: [make_calcified_cultist()]),
     "27": ("Damp Cultist [UD]", lambda: [make_damp_cultist()]),
     "28": ("Seapunk [UD]", lambda: [make_seapunk()]),
@@ -114,7 +94,6 @@ ENCOUNTERS = {
     "34": ("Cultist pair [UD]", lambda: [make_calcified_cultist(), make_damp_cultist()]),
     "35": ("Toadpole [UD]", lambda: [make_toadpole()]),
     "36": ("Toadpoles (Weak) x2 [UD]", make_toadpole_pair),
-    # --- the rest of Act 1: remaining normals, elites and bosses ---
     "37": ("Corpse Slug [UD]", lambda: [make_corpse_slug()]),
     "38": ("Fossil Stalker [UD]", lambda: [make_fossil_stalker()]),
     "39": ("Gremlin Merc [UD]", lambda: [make_gremlin_merc()]),
@@ -129,7 +108,6 @@ ENCOUNTERS = {
     "48": ("Lagavulin Matriarch [UD Boss]", lambda: [make_lagavulin_matriarch()]),
     "49": ("Soul Fysh [UD Boss]", lambda: [make_soul_fysh()]),
     "50": ("Waterfall Giant [UD Boss]", lambda: [make_waterfall_giant()]),
-    # --- Act 2: Hive ---
     "51": ("Bowlbug Rock [Hive]", lambda: [make_bowlbug_rock()]),
     "52": ("Bowlbug Egg [Hive]", lambda: [make_bowlbug_egg()]),
     "53": ("Bowlbug Silk [Hive]", lambda: [make_bowlbug_silk()]),
@@ -152,7 +130,6 @@ ENCOUNTERS = {
     "70": ("The Insatiable [Hive Boss]", lambda: [make_the_insatiable()]),
     "71": ("Knowledge Demon [Hive Boss]", lambda: [make_knowledge_demon()]),
     "72": ("Kaiser Crab [Hive Boss]", make_kaiser_crab),
-    # --- Act 3: Glory ---
     "73": ("Devoted Sculptor [Glory]", lambda: [make_devoted_sculptor()]),
     "74": ("Scroll of Biting [Glory]", lambda: [make_scroll_of_biting()]),
     "75": ("Axebot [Glory]", lambda: [make_axebot()]),
@@ -170,18 +147,12 @@ ENCOUNTERS = {
     "87": ("Test Subject [Glory Boss]", lambda: [make_test_subject()]),
     "88": ("Aeonglass [Glory Boss]", lambda: [make_aeonglass()]),
     "89": ("Doormaker [Glory Boss]", lambda: [make_doormaker()]),
-    # --- Event-only encounters ---
     "90": ("The Merchant??? [Event]", lambda: [make_the_merchant()]),
     "91": ("Battle Friend V1.0 [Event]", lambda: [make_battle_friend_v1()]),
     "92": ("Battle Friend V2.0 [Event]", lambda: [make_battle_friend_v2()]),
     "93": ("Battle Friend V3.0 [Event]", lambda: [make_battle_friend_v3()]),
 }
 
-# A small fixed run. Real STS gauntlets are randomized/branching; this is
-# just enough sequencing to make card rewards mean something.
-# Each entry's factory returns either a single Enemy or a list of Enemies
-# (Inklet Trio always fights as a group of 3) -- _play_combat_loop's caller
-# below normalizes either shape.
 GAUNTLET = [
     ("Nibbit", make_nibbit),
     ("Shrinker Beetle", make_shrinker_beetle),
@@ -213,8 +184,6 @@ def print_enemies(engine):
         if e.current_move is not None:
             intent = e.current_move.name
             if e.current_move.damage:
-                # show effective damage (with the enemy's own Strength applied),
-                # matching how real STS telegraphs intent damage
                 eff = e.deal_attack_damage(e.current_move.damage)
                 intent += f" ({eff} dmg)"
         block_note = f"  Block {e.block}" if e.block else ""
@@ -234,14 +203,29 @@ def print_player(player):
 
 
 def print_pile(pile, title):
+    """A pile's CONTENTS, grouped and sorted -- never its order.
+
+    This used to enumerate the list, which leaked the entire future draw
+    order: draw_cards() pops off the END, so the last line printed was
+    always the very next card you would draw. Real Slay the Spire shows you
+    what is left in the draw pile and deliberately does not show the order,
+    so listing it here handed the player information the game withholds.
+
+    Grouping by name also makes the common question ("how many Defends are
+    left?") answerable at a glance, which enumerating never did.
+    """
     print(f"\n-- {title} ({len(pile)} cards) --")
     if not pile:
         print("  (empty)")
         return
-    for i, c in enumerate(pile):
-        cost = c.current_cost()
+    groups = {}
+    for c in pile:
         name = c.name + ("+" if c.upgraded else "")
-        print(f"  {i}: [{cost}] {name} -- {c.current_description()}")
+        key = (name, str(c.current_cost()), c.current_description())
+        groups[key] = groups.get(key, 0) + 1
+    for (name, cost, desc), n in sorted(groups.items()):
+        count = f"{n}x " if n > 1 else "   "
+        print(f"  {count}[{cost}] {name} -- {desc}")
 
 
 def print_relics(player):
@@ -291,11 +275,7 @@ COMMANDS = (
 
 
 def print_commands():
-    """The command legend, shown once at the start of a combat and on '?'.
-
-    It used to be reprinted in full before EVERY action -- ~110 characters
-    ahead of each card play, several times a turn -- which buried the board
-    state it was supposed to sit under."""
+    """The command legend, shown once at the start of a combat and on '?'."""
     print()
     print("  " + "   ".join(f"{k}={v}" for k, v in COMMANDS))
 
@@ -305,17 +285,7 @@ class QuitGame(Exception):
 
 
 def ask(prompt: str = "> ") -> str:
-    """Every prompt in this module goes through here.
-
-    There are 14 input() sites and only two of them used to guard anything,
-    so Ctrl+D or Ctrl+C escaped as EOFError/KeyboardInterrupt from whichever
-    prompt happened to be live and printed a traceback at the player:
-
-        File "play.py", line 440, in player_take_action
-        EOFError: EOF when reading a line
-
-    Both now raise QuitGame, which main() turns into the same clean exit as
-    typing 'q'. Already strips, so callers need not."""
+    """Every prompt in this module goes through here."""
     try:
         return input(prompt).strip()
     except (EOFError, KeyboardInterrupt):
@@ -324,14 +294,7 @@ def ask(prompt: str = "> ") -> str:
 
 
 def interactive_choice(engine, player, options, prompt, kind):
-    """Answer a CombatEngine.request_choice prompt at the terminal.
-
-    Thirteen cards say "choose a card" and every one of them used to resolve
-    with a coin flip, because there was no way to ask. Installed on the
-    engine in run_combat/run_gauntlet.
-
-    Prompts through ask(), so Ctrl+D/Ctrl+C here quits the game cleanly
-    rather than silently choosing for you."""
+    """Answer a CombatEngine.request_choice prompt at the terminal."""
     print()
     print(f"{prompt} ({player.name}):")
     for i, c in enumerate(options):
@@ -346,14 +309,7 @@ def interactive_choice(engine, player, options, prompt, kind):
 
 
 def choose_active_character(engine, pending):
-    """Prompt for which not-yet-ended living player acts next. Real STS2
-    co-op is simultaneous; a single local terminal can't offer true
-    concurrent input, so instead of forcing a fixed turn order, the
-    human(s) at the keyboard get free choice of who acts each cycle --
-    play a card as A, then B, then back to A, in whatever order feels
-    right, rather than being locked into alternating turns. Shows every
-    pending character's hand up front, not just HP/energy, so that
-    choice can actually be informed by what each of them can do."""
+    """Prompt for which not-yet-ended living player acts next."""
     if len(pending) == 1:
         return pending[0]
     print_enemies(engine)
@@ -387,11 +343,7 @@ def choose_ally_target(engine, player):
 
 
 def use_potion_prompt(engine, player, log_pos):
-    """Returns the new log_pos if a potion was actually used (a real
-    action -- the caller hands control back to character-select), or
-    None if nothing happened (empty inventory, cancelled, or no valid
-    enemy target) -- matching the 'd'/'p'/'r' info-only commands, which
-    re-prompt the SAME player rather than consuming their turn."""
+    """Returns the new log_pos if a potion was actually used (a real action -- the caller hands control..."""
     print_potions(player)
     if not player.potions:
         return None
@@ -419,14 +371,7 @@ def use_potion_prompt(engine, player, log_pos):
 
 
 def player_take_action(engine, player, log_pos):
-    """Handle exactly ONE meaningful action for this player (a successful
-    card play, or ending their turn) and return (ended, new_log_pos).
-    Invalid input and info-only commands ('d'/'p') loop back to re-prompt
-    the SAME player rather than handing control away, since they aren't
-    real game actions. The caller re-shows the character-select prompt
-    (choose_active_character) after every action instead of letting this
-    player keep going -- so whoever's at the keyboard picks who acts
-    next, card by card, rather than being locked into a fixed order."""
+    """Handle exactly ONE meaningful action for this player (a successful card play, or ending their..."""
     while True:
         print_enemies(engine)
         print_player(player)
@@ -493,24 +438,10 @@ def run_combat(players, enemies):
 
 def offer_card_reward(player, num_players, extra_from_prayer_wheel=True,
                        rarity=None, was_elite=False):
-    """Real-STS-style reward screen: pick 1 of 3 random cards from the full
-    ported Ironclad pool, or skip. Picked cards go into deck_template, which
-    Player.start_combat() rebuilds the draw pile from -- so it persists into
-    the next fight of the run. Multiplayer-only cards (e.g. Tank) are excluded
-    from solo-run rewards, matching real STS2's Is_Multiplayer restriction.
-    Any relic with an on_card_added hook (Frozen/Molten/Toxic Egg, and now
-    Book of Five Rings) fires here, the moment a card genuinely enters the
-    deck -- not when it's drawn/played.
-
-    rarity: restrict the offer to one tier (White Star's Rare-only drop).
-    was_elite: whether the fight just won was an elite, which is what gates
-    that White Star drop."""
+    """Real-STS-style reward screen: pick 1 of 3 random cards from the full ported Ironclad pool, or skip."""
     label = f"{rarity} card reward" if rarity else "card reward"
     print(f"\n{'*' * 60}\n{player.name}: choose a {label}\n{'*' * 60}")
     pool = FACTORIES_BY_RARITY[rarity] if rarity else CARD_POOL_IRONCLAD
-    # The config's card filter applies to REWARDS too, not just the starting
-    # deck -- otherwise a "Strike and Defend only" run would be handed a
-    # Perfected Strike after the first win.
     _permitted = config.card_filter(CONFIG)
     pool = [factory for factory in pool if _permitted(factory().name)]
     if not pool:
@@ -543,9 +474,6 @@ def offer_card_reward(player, num_players, extra_from_prayer_wheel=True,
         offer_card_reward(player, num_players, extra_from_prayer_wheel=False,
                           was_elite=was_elite)
 
-    # White Star: "Elites drop an additional Rare card reward." Gated on the
-    # fight actually having been an elite, and on `rarity is None` so the
-    # extra Rare drop can't itself trigger another one.
     if (rarity is None and was_elite
             and any(r.name == "White Star" for r in player.relics)):
         print(f"\n(White Star: an additional Rare card reward from the elite)")
@@ -554,12 +482,7 @@ def offer_card_reward(player, num_players, extra_from_prayer_wheel=True,
 
 
 def offer_relic_reward(player):
-    """Relic reward screen, parallel to offer_card_reward: pick 1 of 2
-    random relics not already owned, or skip. This replica only has
-    regular (non-elite/non-boss) fights so far -- real STS2 doesn't hand
-    out a relic after every regular fight, but with no elites/chests/shops
-    yet (see README known gaps) there's no other relic-drop opportunity to
-    hook this into, so it rides along after each gauntlet win for now."""
+    """Relic reward screen, parallel to offer_card_reward: pick 1 of 2 random relics not already owned..."""
     owned = {r.name for r in player.relics}
     pool = [r for r in RELIC_POOL_IRONCLAD if r.name not in owned]
     if not pool:
@@ -583,11 +506,7 @@ def offer_relic_reward(player):
 
 
 def offer_potion_reward(player):
-    """Potion reward screen, parallel to offer_card_reward/offer_relic_reward.
-    Real STS2 gates potion pickup on having a free slot -- if the player's
-    inventory is already full, the reward is skipped entirely rather than
-    forcing a discard choice (matching how a full potion belt behaves at
-    a real combat-reward screen)."""
+    """Potion reward screen, parallel to offer_card_reward/offer_relic_reward."""
     if len(player.potions) >= player.potion_slots:
         print(f"\n{player.name}'s potion belt is full -- no potion reward offered.")
         return
@@ -610,18 +529,7 @@ def offer_potion_reward(player):
 
 
 def run_gauntlet(players):
-    """Runs the fixed GAUNTLET sequence, carrying HP and deck (including
-    reward picks) forward between fights. Player.start_combat() (called by
-    CombatEngine's constructor) always resets hp to max_hp -- we override
-    that with the carried-over value right after construction, before any
-    turn starts, so HP genuinely persists across fights like a real run.
-
-    Real STS2 co-op: a player downed mid-fight revives at 1 HP on the next
-    floor if a teammate survived to win the fight (confirmed on wiki.gg --
-    see README's source-reliability note). A downed player doesn't end the
-    fight early either -- combat.py's _check_victory_defeat only calls
-    defeat once EVERY player is down, so teammates can still finish a fight
-    solo and trigger the revive below."""
+    """Runs the fixed GAUNTLET sequence, carrying HP and deck (including reward picks) forward between..."""
     for name, make_enemy in GAUNTLET:
         if not any(p.hp > 0 for p in players):
             print("\nYour whole party has fallen. Run over.")
@@ -650,8 +558,6 @@ def run_gauntlet(players):
         was_elite = any(e.category == "elite" for e in enemies)
         for p in players:
             if p.alive:
-                # Each reward screen is gated by config.json, so a restricted
-                # run does not silently reintroduce what it switched off.
                 if CONFIG["content"]["card_rewards"]:
                     offer_card_reward(p, len(players), was_elite=was_elite)
                 if CONFIG["content"]["relic_rewards"]:
@@ -663,16 +569,7 @@ def run_gauntlet(players):
 
 
 def _play_combat_loop(engine, players):
-    """Shared player-phase/enemy-phase loop, factored out so run_combat()
-    (one fight) and run_gauntlet() (fight, already-started engine) both
-    drive the same turn structure.
-
-    The player phase lets whoever's at the keyboard freely choose WHICH
-    living player acts next, each cycle, instead of either locking player
-    1 into fully resolving their turn before player 2 even starts, or
-    forcing a fixed alternating order -- neither matches real STS2's
-    simultaneous co-op turns, and free choice of actor is the closest a
-    single local terminal (one input stream) can get to that."""
+    """Shared player-phase/enemy-phase loop, factored out so run_combat() (one fight) and..."""
     print_commands()
     turn_log_pos = len(engine.log)
     while not engine.is_over:
@@ -706,11 +603,6 @@ def _play_combat_loop(engine, players):
     return engine
 
 
-# Region is read off the encounter label, which is the only place it is
-# recorded -- ENCOUNTERS is a flat dict. Tier comes from the real
-# Enemy.category, so it cannot drift from the data. bench.py imports both
-# from here; the dependency can only run this way round, since bench
-# already imports play.
 REGION_TAGS = (
     ("[UD", "Act 1  Underdocks"),
     ("[Hive", "Act 2  Hive"),
@@ -743,11 +635,7 @@ def tier_of(make_enemies) -> str:
 
 
 def print_encounter_menu():
-    """All 93 encounters, grouped by region and by normal/elite/boss.
-
-    This used to be one flat 93-line list, so picking a fight meant
-    scrolling past every fight in the game and reading the "[Hive]" /
-    "[Glory]" tags off the names to work out where anything was."""
+    """All 93 encounters, grouped by region and by normal/elite/boss."""
     groups = {}
     for key, (name, make_enemies) in ENCOUNTERS.items():
         groups.setdefault((region_of(name), tier_of(make_enemies)),
@@ -759,7 +647,6 @@ def print_encounter_menu():
                 continue
             print()
             print("  -- {}  |  {} --".format(region, TIER_LABEL[tier]))
-            # Two columns: 93 entries one-per-line is what made this a wall.
             cells = ["{:>3}: {}".format(k, n) for k, n in block]
             for i in range(0, len(cells), 2):
                 row = "".join(c.ljust(40) for c in cells[i:i + 2])
@@ -767,12 +654,7 @@ def print_encounter_menu():
 
 
 def main(config_path=None):
-    """Set the game up from config.json, then hand over to the player.
-
-    Anything the config leaves as null/"ask" still gets prompted for, so the
-    default config behaves exactly like the old hardcoded startup. A config
-    that specifies everything starts the fight immediately -- which is what
-    a UI launching this wants."""
+    """Set the game up from config.json, then hand over to the player."""
     global CONFIG
     try:
         CONFIG = config.load(config_path)
@@ -786,8 +668,6 @@ def main(config_path=None):
     print(config.describe(CONFIG))
 
     if CONFIG.get("seed") is not None:
-        # Pins the deck shuffles and the HP a factory rolls, so a UI can
-        # hand the same fight to a human and an agent.
         random.seed(CONFIG["seed"])
         seed_content(CONFIG["seed"])
 
@@ -817,8 +697,6 @@ def main(config_path=None):
 
 
 if __name__ == "__main__":
-    # `python testing/play.py my_config.json` to use a different setup, which
-    # is how a UI would launch several configurations side by side.
     _path = sys.argv[1] if len(sys.argv) > 1 else None
     try:
         main(_path)

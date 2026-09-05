@@ -3,9 +3,6 @@
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -107,7 +104,6 @@ check("...and below", p.deal_attack_damage(6), 9)
 p.hp = 100
 check("...and it switches back off", p.deal_attack_damage(6), 6)
 
-# Inert enemy so the enemy phase can't spend the Block being measured.
 p = Player("Tester", 200, 99, deck=make_starter_deck())
 p.add_relic(relic("Sturdy Clamp"))
 eng = CombatEngine([p], [E.make_battle_friend_v1()], seed=13, scale_enemies=False)

@@ -1,12 +1,7 @@
-"""Thorns verification for task #34. Every assertion below is either a
-wiki-sourced number or an explicitly-reasoned engine rule (see the
-_retaliate_thorns docstring in entities.py)."""
+"""Thorns verification for task #34."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -34,7 +29,6 @@ def card(name):
         c = f()
         if c.name == name:
             return c
-    # Basic cards (Strike/Defend/Bash) aren't in the reward pool
     for c in make_starter_deck():
         if c.name == name:
             return c
@@ -170,7 +164,6 @@ print()
 print("=" * 70)
 print("7. Enemy attacks eat the PLAYER's Thorns, per hit")
 print("=" * 70)
-# 3-hit enemy move vs a player holding 2 Thorns -> enemy should take 6.
 def _triple(engine, enemy):
     t = engine.pick_enemy_attack_target()
     for _ in range(3):
@@ -213,7 +206,7 @@ print()
 print("  -- and the trap the cycle is built around --")
 tp = make_toadpole()
 eng, p, e = setup(enemy=tp)
-e.add_status(StatusType.THORNS, 2)          # as if it had just used Spiken
+e.add_status(StatusType.THORNS, 2)
 p.hand = [card("Twin Strike"), card("Strike")]
 hp0 = p.hp
 eng.play_card(p, p.hand[0], target=e)

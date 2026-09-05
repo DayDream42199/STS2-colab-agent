@@ -3,9 +3,6 @@
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -61,13 +58,13 @@ owl = E.make_owl_magistrate()
 eng, p = setup([owl])
 for _ in range(2):
     enemy_turn(eng, p)
-enemy_turn(eng, p)          # Judicial Flight
+enemy_turn(eng, p)
 check("Judicial Flight grants Soar", owl.has_status(StatusType.SOAR), True)
 hp0 = owl.hp
 owl.take_damage(40, log=eng.log, attacker=p)
 check("Soar halves attack damage", hp0 - owl.hp, 20)
 check("...and spends no stack (unlike Flutter)", owl.has_status(StatusType.SOAR), True)
-enemy_turn(eng, p)          # Verdict
+enemy_turn(eng, p)
 check("Verdict lands and removes Soar", owl.has_status(StatusType.SOAR), False)
 check("...and applies 4 Vulnerable", p.get_status(StatusType.VULNERABLE), 4)
 
@@ -78,7 +75,7 @@ print("=" * 74)
 gang = E.make_knight_gang()
 check("three knights", [e.name for e in gang], ["Flail Knight", "Spectral Knight", "Magi Knight"])
 eng, p = setup(gang)
-enemy_turn(eng, p)          # Spectral: Hex, Magi: Power Shield
+enemy_turn(eng, p)
 check("Hex is applied", p.get_status(StatusType.HEX) > 0, True)
 marked_a, marked_b = card("Strike"), card("Defend")
 p.hand = [marked_a, marked_b]
@@ -120,7 +117,7 @@ units = E.make_queen()
 check("Queen fights with one Amalgam",
       [e.name for e in units], ["Queen", "Torch Head Amalgam"])
 eng, p = setup(units)
-enemy_turn(eng, p)          # Puppet Strings
+enemy_turn(eng, p)
 check("Puppet Strings sets Chains of Binding", p.chains_of_binding, 3)
 p.hand = []
 p.draw_pile = [card("Strike") for _ in range(5)]
@@ -181,9 +178,8 @@ print("=" * 74)
 aeon = E.make_aeonglass()
 eng, p = setup([aeon])
 for _ in range(3):
-    enemy_turn(eng, p)      # Ebb, Eye Lasers, Increasing Intensity
+    enemy_turn(eng, p)
 def all_withers(pl):
-    # Withers can be reshuffled into the draw pile or drawn, so count every pile.
     return [c for c in pl.hand + pl.draw_pile + pl.discard_pile + pl.exhaust_pile
             if c.name.startswith("Wither")]
 withers = all_withers(p)
@@ -209,7 +205,7 @@ print("Fabricator's bot factory, and Guardbot buffing it")
 print("=" * 74)
 fab = E.make_fabricator()
 eng, p = setup([fab])
-enemy_turn(eng, p)          # Fabricate
+enemy_turn(eng, p)
 bots = [e.name for e in eng.enemies if e is not fab]
 check("Fabricate summons two bots", len(bots), 2)
 check("...one defensive, one aggressive",

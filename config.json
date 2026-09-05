@@ -1,20 +1,20 @@
 {
-  "preset": "full",
+  "preset": "no_items",
   "party": [
     {
       "name": "Ironclad",
       "hp": 80,
       "energy": 3,
       "deck": "starter",
-      "starting_relic": "Burning Blood"
+      "starting_relic": null
     }
   ],
   "content": {
-    "relics": true,
-    "potions": true,
+    "relics": false,
+    "potions": false,
     "card_rewards": true,
-    "relic_rewards": true,
-    "potion_rewards": true
+    "relic_rewards": false,
+    "potion_rewards": false
   },
   "cards": {
     "allow": null,

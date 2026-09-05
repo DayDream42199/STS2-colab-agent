@@ -1,17 +1,8 @@
 # -*- coding: utf-8 -*-
-"""#45: the card-choice interface.
-
-Thirteen cards say CHOOSE rather than RANDOM and every one of them used to
-resolve with a coin flip. This checks that each now routes through
-engine.request_choice, that "random" cards were left alone, and that the
-resolver contract holds.
-"""
+"""#45: the card-choice interface."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -79,14 +70,12 @@ print("=" * 74)
 print("Every CHOOSE card now asks")
 print("=" * 74)
 
-# name -> (setup fn, expected kind)
 def _hand_filler(p, n=3):
     p.hand += [make_starter_deck()[0] for _ in range(n)]
 
 
 cases = []
 
-# Armaments: "Upgrade a card in your Hand"
 r = Recorder()
 eng, p, e = setup(r)
 arm = pool("Armaments")
@@ -94,7 +83,6 @@ p.hand = [arm, make_starter_deck()[0], make_starter_deck()[1]]
 eng.play_card(p, arm)
 check("Armaments asks which card to upgrade", [c[1] for c in r.calls], ["upgrade"])
 
-# True Grit: base is RANDOM, upgraded is a choice.
 r = Recorder()
 eng, p, e = setup(r)
 tg = pool("True Grit")
@@ -110,7 +98,6 @@ eng.play_card(p, tgu)
 check("True Grit+ DOES ask -- its text drops 'at random'",
       [c[1] for c in r.calls], ["exhaust"])
 
-# Headbutt
 r = Recorder()
 eng, p, e = setup(r)
 hb = pool("Headbutt")
@@ -118,7 +105,6 @@ p.discard_pile = [make_starter_deck()[0], make_starter_deck()[1]]
 play(eng, p, hb, e)
 check("Headbutt asks which card to put back", [c[1] for c in r.calls], ["to_draw_top"])
 
-# Purity: N separate prompts, and it must not offer the same card twice.
 r = Recorder()
 eng, p, e = setup(r)
 pur = pool("Purity")
@@ -129,7 +115,6 @@ first_offers = r.calls[0][2]
 check("...and the offer shrinks as cards are taken",
       [len(c[2]) for c in r.calls], [5, 4, 3])
 
-# Dual Wield
 r = Recorder()
 eng, p, e = setup(r)
 dw = pool("Dual Wield")
@@ -137,7 +122,6 @@ p.hand = [dw, make_starter_deck()[0], pool("Inflame")]
 eng.play_card(p, dw)
 check("Dual Wield asks which card to copy", [c[1] for c in r.calls], ["copy"])
 
-# Thinking Ahead
 r = Recorder()
 eng, p, e = setup(r)
 ta = pool("Thinking Ahead")
@@ -149,7 +133,6 @@ check("Thinking Ahead asks under 'stash', NOT 'to_draw_top'",
 check("...because Headbutt's to_draw_top wants the BEST card and this one "
       "wants the worst", "stash" != "to_draw_top", True)
 
-# Neow's Fury: up to N prompts
 r = Recorder()
 eng, p, e = setup(r)
 nf = pool("Neow's Fury")
@@ -157,7 +140,6 @@ p.discard_pile = [make_starter_deck()[0] for _ in range(4)]
 play(eng, p, nf, e)
 check("Neow's Fury asks once per card retrieved", len(r.calls), 2)
 
-# Wish
 r = Recorder()
 eng, p, e = setup(r)
 w = pool("Wish")
@@ -166,7 +148,6 @@ p.hand = [w]
 eng.play_card(p, w)
 check("Wish asks which card to tutor", [c[1] for c in r.calls], ["to_hand"])
 
-# Seeker Strike: exactly 3 on offer, and distinct instances
 r = Recorder()
 eng, p, e = setup(r)
 ss = pool("Seeker Strike")
@@ -174,7 +155,6 @@ p.draw_pile = [make_starter_deck()[0] for _ in range(8)]
 play(eng, p, ss, e)
 check("Seeker Strike offers exactly 3", [len(c[2]) for c in r.calls], [3])
 
-# Discovery / Abundance: 3 fresh options
 r = Recorder()
 eng, p, e = setup(r)
 d = pool("Discovery")
@@ -193,7 +173,6 @@ powers = {f().name for f in C.FACTORIES_BY_TYPE[CardType.POWER]}
 check("...all of which really are Powers",
       set(r.calls[0][2]) <= powers, True)
 
-# Stratagem fires on reshuffle
 r = Recorder()
 eng, p, e = setup(r)
 st = pool("Stratagem")
@@ -204,7 +183,6 @@ p.discard_pile = [make_starter_deck()[0] for _ in range(4)]
 p.draw_cards(1, eng.log)
 check("Stratagem asks on reshuffle", [c[1] for c in r.calls], ["to_hand"])
 
-# Entropy
 r = Recorder()
 eng, p, e = setup(r)
 ent = pool("Entropy")
@@ -246,7 +224,6 @@ eng, p, e = setup()
 check("no resolver installed -> default is random, not a crash",
       eng.choice_resolver, None)
 
-# A resolver returning something never offered must not be trusted.
 rogue = Recorder(rule=lambda opts: C.make_wound())
 eng, p, e = setup(rogue)
 w = pool("Wish")
@@ -258,7 +235,6 @@ check("a rogue resolver cannot smuggle in an un-offered card",
 check("...and the engine logs it",
       any("not offered" in line for line in eng.log), True)
 
-# Single option -> no prompt at all.
 r = Recorder()
 eng, p, e = setup(r)
 w = pool("Wish")
@@ -267,7 +243,6 @@ p.hand = [w]
 eng.play_card(p, w)
 check("a single option is taken without asking", r.calls, [])
 
-# Empty option list -> no crash, no prompt.
 r = Recorder()
 eng, p, e = setup(r)
 w = pool("Wish")
@@ -286,9 +261,6 @@ wound = C.make_wound()
 check("'to_hand' takes the strongest option",
       bench.greedy_choice(eng, p, [strike, bludgeon, wound], "", "to_hand").name,
       "Bludgeon")
-# Shed prompts deliberately defer to random -- greedy on them measured
-# WORSE than random (see greedy_choice's docstring), so this asserts the
-# deferral, not a preference.
 picks = {bench.greedy_choice(eng, p, [strike, bludgeon, wound], "", "exhaust").name
          for _ in range(40)}
 check("'exhaust' defers to random rather than always dumping the same card",
@@ -304,7 +276,6 @@ check("Powers beat a one-shot for 'to_hand'",
       bench.greedy_choice(eng, p, [strike, pool("Inflame")], "", "to_hand").name,
       "Inflame")
 
-# End to end: with the heuristic, Wish must tutor the best card, not a random one.
 eng, p, e = setup(bench.greedy_choice)
 w = pool("Wish")
 p.draw_pile = [make_starter_deck()[1], make_starter_deck()[1], pool("Bludgeon")]

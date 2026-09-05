@@ -1,0 +1,16 @@
+from enum import Enum
+
+class NetworkEvent(Enum):
+    SERVER_STARTED = 1
+    START_FAILED = 2
+
+    CONNECTED = 3
+    CONNECTION_FAILED = 4
+    DISCONNECTED = 5
+
+    CLIENT_CONNECTED = 6
+    CLIENT_DISCONNECTED = 7
+    CLIENT_DISCONNECT_FAILED = 8
+
+    MESSAGE_RECEIVED = 9
+    SEND_FAILED = 10

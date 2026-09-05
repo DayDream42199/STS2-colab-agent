@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""What does env.py actually expose, before touching the enemy cap?
-
-Three things worth knowing: is the observation a fixed size across player
-counts, can a summoned enemy past slot 4 be seen or hit, and does the
-observation say anything about the hand the action space indexes into.
-"""
+"""What does env.py actually expose, before touching the enemy cap?"""
 import os
 import sys
 
@@ -52,7 +47,6 @@ print(f"   observation length: {len(obs)}  "
 seen = min(len(eng.enemies), ENV.MAX_ENEMIES)
 print(f"   enemies represented in the observation: {seen} of {len(eng.enemies)}")
 
-# Can the agent target the ones past the cap?
 p.hand = [make_starter_deck()[0]]
 mask = e.legal_action_mask()
 targetable = {t for slot in range(1)

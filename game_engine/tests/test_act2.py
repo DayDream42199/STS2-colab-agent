@@ -3,9 +3,6 @@
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -79,15 +76,15 @@ print("Burrowed (Tunneler)")
 print("=" * 74)
 tun = E.make_tunneler()
 eng, p = setup([tun])
-enemy_turn(eng, p)          # Bite
-enemy_turn(eng, p)          # Burrow
+enemy_turn(eng, p)
+enemy_turn(eng, p)
 check("Burrow grants Burrowed and 32 Block",
       (tun.has_status(StatusType.BURROWED), tun.block), (True, 32))
-enemy_turn(eng, p)          # Attack from Below -- block must survive its own turn
+enemy_turn(eng, p)
 check("Block is NOT cleared while burrowed", tun.block, 32)
 tun.block = 0
-enemy_turn(eng, p)          # intent was queued while blocked, so this is the last dig
-enemy_turn(eng, p)          # now it re-picks: block gone -> Emerging Strike
+enemy_turn(eng, p)
+enemy_turn(eng, p)
 check("breaking the Block forces it out", tun.has_status(StatusType.BURROWED), False)
 
 print()
@@ -111,7 +108,7 @@ print("  -- theft and escape --")
 hop = E.make_thieving_hopper()
 eng, p = setup([hop])
 p.draw_pile = [card("Bludgeon")]
-enemy_turn(eng, p)          # Thievery
+enemy_turn(eng, p)
 check("Thievery steals a card from the draw pile", len(hop.stolen_cards), 1)
 check("...and it leaves the deck", any(c.name == "Bludgeon" for c in p.draw_pile), False)
 eng._check_victory_defeat()
@@ -127,7 +124,7 @@ print("Sandpit + Frantic Escape (The Insatiable)")
 print("=" * 74)
 boss = E.make_the_insatiable()
 eng, p = setup([boss])
-enemy_turn(eng, p)          # Liquify Ground; start_player_turn ticks once
+enemy_turn(eng, p)
 check("Liquify Ground applies Sandpit (4, ticked to 3)",
       p.get_status(StatusType.SANDPIT), 3)
 check("...and shuffles in 6 Frantic Escape",
@@ -137,15 +134,9 @@ p.hand = [esc]
 before = p.get_status(StatusType.SANDPIT)
 eng.play_card(p, esc)
 check("Frantic Escape buys a turn", p.get_status(StatusType.SANDPIT), before + 1)
-# current_cost(), not .cost: the escalation goes through set_temp_cost so it
-# reverts at combat end (see test_deck_purity -- a card in deck_template IS
-# the object in hand, so writing .cost directly would inflate a real deck
-# card permanently). The printed cost is deliberately still 1.
 check("...and gets more expensive", esc.current_cost(p), 2)
 check("...without touching its printed cost", esc.cost, 1)
 
-# Run the countdown out with no escapes. Uses a plain enemy so the boss's
-# own Liquify Ground can't top the counter back up mid-test.
 eng, p = setup([E.make_bowlbug_egg()])
 p.add_status(StatusType.SANDPIT, 2)
 enemy_turn(eng, p)
@@ -159,13 +150,13 @@ print("Toxic (Myte)")
 print("=" * 74)
 myte = E.make_myte()
 eng, p = setup([myte])
-enemy_turn(eng, p)          # Toxic Cornucopia
+enemy_turn(eng, p)
 check("Toxic Cornucopia puts 2 Toxic in HAND",
       sum(1 for c in p.hand if c.name == "Toxic"), 2)
 p.block = 100
 hp0 = p.hp
 eng.end_player_turn()
-check("Toxic costs 5 damage each if still held", hp0 - p.hp, 0)   # block absorbed
+check("Toxic costs 5 damage each if still held", hp0 - p.hp, 0)
 check("...and exhausts itself", sum(1 for c in p.exhaust_pile if c.name == "Toxic"), 2)
 
 print()
@@ -174,23 +165,23 @@ print("Summoning: Ovicopter, Tough Egg, The Obscura")
 print("=" * 74)
 ovi = E.make_ovicopter()
 eng, p = setup([ovi])
-enemy_turn(eng, p)          # Lay Eggs
+enemy_turn(eng, p)
 check("Lay Eggs summons 3 Tough Eggs",
       sum(1 for e in eng.enemies if e.name == "Tough Egg" and e.alive), 3)
 egg = next(e for e in eng.enemies if e.name == "Tough Egg")
-enemy_turn(eng, p)          # eggs Nibble
-enemy_turn(eng, p)          # eggs Hatch
+enemy_turn(eng, p)
+enemy_turn(eng, p)
 check("a Tough Egg hatches into a Hatchling",
       any(e.name == "Hatchling" and e.alive for e in eng.enemies), True)
 check("...and the egg is gone", egg.alive, False)
 
 obs = E.make_the_obscura()
 eng, p = setup([obs])
-enemy_turn(eng, p)          # Illusion
+enemy_turn(eng, p)
 check("The Obscura summons a Parafright",
       any(e.name == "Parafright" for e in eng.enemies), True)
-enemy_turn(eng, p)          # Piercing Gaze
-enemy_turn(eng, p)          # Wail
+enemy_turn(eng, p)
+enemy_turn(eng, p)
 check("Wail buffs EVERY enemy",
       all(e.get_status(StatusType.STRENGTH) >= 3 for e in eng.enemies if e.alive), True)
 

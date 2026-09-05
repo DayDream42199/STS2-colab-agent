@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Verification for the 21 newly-ported Ironclad cards and the engine
-features they needed."""
+"""Verification for the 21 newly-ported Ironclad cards and the engine features they needed."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -84,8 +80,6 @@ print("=" * 74)
 eng, p, e = setup()
 agg = card("Aggression")
 play(eng, p, agg)
-# Fire the turn_start hook directly with a known discard pile, so the check
-# can't be confused by the starter deck's own Attacks being reshuffled in.
 marker = card("Anger")
 p.discard_pile = [marker]
 p.hand = []
@@ -135,15 +129,12 @@ print("=" * 74)
 eng, p, e = setup()
 e.add_status(StatusType.VULNERABLE, 5)
 ehp0 = e.hp
-play(eng, p, card("Strike"))              # 6 dmg * 1.5 vulnerable = 9
+play(eng, p, card("Strike"))
 check("baseline Strike into Vulnerable", ehp0 - e.hp, 9)
 eng, p, e = setup()
 e.add_status(StatusType.VULNERABLE, 5)
-play(eng, p, card("Cruelty"))             # +25%
+play(eng, p, card("Cruelty"))
 ehp0 = e.hp
-# ADDITIVE with Vulnerable's own 50%, not multiplied on top of it:
-# 6 * (1.5 + 0.25) = 10.5 -> 10. Paper Phrog's wording ("75% more rather
-# than 50%") is what settles this.
 play(eng, p, card("Strike"))
 check("Cruelty adds 25% vs Vulnerable", ehp0 - e.hp, 10)
 
@@ -179,7 +170,7 @@ check("...and expires at end of turn", p.get_status(StatusType.THORNS_THIS_TURN)
 
 eng, p, e = setup()
 ehp0 = e.hp
-play(eng, p, card("Grapple"))             # 7 damage
+play(eng, p, card("Grapple"))
 after_hit = e.hp
 check("Grapple deals 7", ehp0 - after_hit, 7)
 p.gain_block(5)
@@ -249,7 +240,6 @@ p.draw_cards(1, eng.log)
 check("Hellraiser auto-plays a drawn Strike", ehp0 - e.hp, 6)
 check("...and that exact card does not stay in hand", drawn in p.hand, False)
 check("...it goes to the discard pile", drawn in p.discard_pile, True)
-# A non-Strike draw must be left alone.
 eng, p, e = setup()
 play(eng, p, card("Hellraiser"))
 p.hand = []
@@ -287,7 +277,7 @@ for i in range(2):
     play(eng, p, card("Strike"))
     p.hand = [c for c in p.hand if c.name != "Strike"]
 check("no copy after 2 Attacks", sum(1 for c in p.hand if c.name == "Strike"), 0)
-play(eng, p, card("Uppercut"))     # the third Attack
+play(eng, p, card("Uppercut"))
 check("Juggling copies the THIRD Attack into hand",
       sum(1 for c in p.hand if c.name == "Uppercut"), 1)
 play(eng, p, card("Strike"))
@@ -315,8 +305,6 @@ print()
 print("=" * 74)
 print("Applier-side events and temporary stat loss")
 print("=" * 74)
-# Control first: Bash alone draws nothing. play() adds the card to hand and
-# then plays it, so hand size is unchanged unless something draws.
 eng, p, e = setup()
 before = len(p.hand)
 play(eng, p, card("Bash"))
@@ -324,10 +312,10 @@ check("control: Bash alone draws nothing", len(p.hand), before)
 eng, p, e = setup()
 play(eng, p, card("Vicious"))
 before = len(p.hand)
-play(eng, p, card("Bash"))     # applies Vulnerable -> Vicious draws 1
+play(eng, p, card("Bash"))
 check("Vicious draws when YOU apply Vulnerable", len(p.hand), before + 1)
 before = len(p.hand)
-play(eng, p, card("Strike"))   # no Vulnerable applied
+play(eng, p, card("Strike"))
 check("...and not on an unrelated Attack", len(p.hand), before)
 
 eng, p, e = setup()

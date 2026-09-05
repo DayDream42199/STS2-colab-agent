@@ -2,9 +2,6 @@
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -28,7 +25,6 @@ def check(label, condition, detail=""):
         print(f"                 {detail}")
 
 
-# ---- 1. Enemy debuffs never decay -------------------------------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -41,7 +37,6 @@ check("Enemy Vulnerable never decays (permanent debuff)",
       f"after 6 full turns, Vulnerable still = {e.get_status(StatusType.VULNERABLE)} (should have expired)")
 
 
-# ---- 2. Enemy poison never ticks --------------------------------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -55,7 +50,6 @@ check("Enemy Poison never ticks (0 damage dealt)",
       f"after 4 turns with 10 Poison: hp {hp_before} -> {e.hp}, poison still {e.get_status(StatusType.POISON)}")
 
 
-# ---- 3. Enemy block never clears --------------------------------------
 p = Player('P', max_hp=500, max_energy=99, deck=make_starter_deck())
 axe = make_axe_raider(); axe.hp = axe.max_hp = 500
 eng = CombatEngine([p], [axe], seed=1)
@@ -67,7 +61,6 @@ check("Enemy Block never clears (accumulates forever)",
       f"Axe Raider block after 6 turns = {axe.block} (Swing grants 5, should not stack across turns)")
 
 
-# ---- 4. Enemy Ritual/Metallicize/Regen never tick ---------------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -81,7 +74,6 @@ check("Enemy Metallicize/Ritual never fire",
       f"after 3 turns: block={e.block} (expect >0), strength={e.get_status(StatusType.STRENGTH)} (expect >0)")
 
 
-# ---- 5. Infernal Blade double-exhaust ---------------------------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -96,7 +88,6 @@ check("Infernal Blade exhausts itself TWICE",
       f"card appears {occurrences}x in exhaust_pile; exhaust counter +{eng.total_exhausted_this_combat - exh_before}")
 
 
-# ---- 5b. knock-on: Feel No Pain double-triggers on Infernal Blade -----
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -113,7 +104,6 @@ check("Feel No Pain double-triggers from Infernal Blade's double exhaust",
       f"block gained = {p.block} (Feel No Pain grants 3 per exhaust; expect 3, not 6)")
 
 
-# ---- 6. Spite upgraded should hit 3 times -----------------------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -129,7 +119,6 @@ check("Spite+ hits only 2x (card text says 3x)",
       f"upgraded Spite dealt {dealt} (5x2); text says 'hits 3 times' = 15")
 
 
-# ---- 7. end_player_turn has no _combat_over guard -> double combat-end -
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 p.add_relic(BURNING_BLOOD)
 e = make_nibbit(); e.hp = e.max_hp = 1
@@ -140,7 +129,7 @@ strike = fresh('Bludgeon')
 p.hand = [strike]
 eng.play_card(p, strike, target=e)
 hp_after_first = p.hp
-eng.end_player_turn()      # called again after combat already over
+eng.end_player_turn()
 hp_after_second = p.hp
 victory_lines = sum(1 for l in eng.log if 'VICTORY' in l)
 check("end_player_turn() after victory re-fires on_combat_end relics",
@@ -148,7 +137,6 @@ check("end_player_turn() after victory re-fires on_combat_end relics",
       f"Burning Blood heal applied twice: hp {hp_after_first} -> {hp_after_second}; VICTORY logged {victory_lines}x")
 
 
-# ---- 8. Drum of Battle re-registers its hook on every play ------------
 p = Player('P', max_hp=200, max_energy=99, deck=make_starter_deck())
 e = make_nibbit(); e.hp = e.max_hp = 500
 eng = CombatEngine([p], [e], seed=1)
@@ -156,12 +144,12 @@ eng.start_player_turn()
 drum = fresh('Drum of Battle')
 p.draw_pile = [fresh('Bludgeon') for _ in range(20)]
 p.hand = [drum]
-eng.play_card(p, drum)          # play 1 -> registers hook
+eng.play_card(p, drum)
 p.discard_pile.remove(drum)
 p.hand.append(drum)
-eng.play_card(p, drum)          # play 2 -> registers a SECOND hook
+eng.play_card(p, drum)
 energy_before = p.energy
-eng.exhaust_card(p, drum)       # should grant +2 once, not +4
+eng.exhaust_card(p, drum)
 check("Drum of Battle grants energy once per PLAY, not once per exhaust",
       p.energy - energy_before > 2,
       f"energy gained on single exhaust after 2 plays = {p.energy - energy_before} (expect 2)")

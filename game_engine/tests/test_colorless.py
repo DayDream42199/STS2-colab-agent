@@ -1,17 +1,8 @@
 # -*- coding: utf-8 -*-
-"""#39: the rest of the Colorless module.
-
-Part 1 is a smoke pass -- every new card played at least once, base and
-upgraded, against a punching bag. Part 2 unit-tests the mechanically
-interesting ones, especially the new keywords (Retain, Ethereal) and the
-cards that touch shared engine state.
-"""
+"""#39: the rest of the Colorless module."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -83,8 +74,6 @@ for factory in playable:
             card = factory()
             if upg:
                 card.upgrade()
-            # Give the piles something to work with so draw/discard/pull
-            # effects exercise a real path rather than an empty one.
             p.draw_pile = [C.make_starter_deck()[0] for _ in range(6)]
             p.discard_pile = [C.make_starter_deck()[1] for _ in range(4)]
             play(eng, p, card, e)
@@ -95,8 +84,6 @@ for factory in playable:
             crashes.append(f"{factory().name}{'+' if upg else ''}: {ex!r}")
 check("all playable colorless cards survive a full turn", crashes, [])
 
-# Statuses and curses are mostly unplayable; the check is that HOLDING them
-# through a turn cycle is safe, which is the path that actually runs.
 held_crashes = []
 for mk in list(STATUS_CARDS) + list(CURSE_POOL):
     try:
@@ -135,7 +122,6 @@ p.hand = [app_up]
 eng.end_player_turn()
 check("Apparition+ LOSES Ethereal (discards instead)", len(p.discard_pile), 1)
 
-# Ethereal must outrank a hand-wide Retain, or Void/Apparition jam forever.
 eng, p, e = setup()
 p.hand = [find("Void"), find("Wish")]
 p.retain_hand_turns = 1
@@ -193,9 +179,9 @@ check("...after which the other card plays", eng.play_card(p, other, target=e), 
 eng, p, e = setup()
 clash = find("Clash")
 defend = [c for c in make_starter_deck() if c.name == "Defend"][0]
-p.hand = [clash, defend]   # a Defend in hand
+p.hand = [clash, defend]
 check("Clash refuses with a non-Attack in hand", eng.play_card(p, clash, target=e), False)
-p.hand = [clash, make_starter_deck()[0]]   # all Attacks
+p.hand = [clash, make_starter_deck()[0]]
 check("...and plays when every card is an Attack", eng.play_card(p, clash, target=e), True)
 
 eng, p, e = setup()
@@ -254,7 +240,7 @@ check("The Bomb does nothing immediately", e.hp, hp0)
 for _ in range(2):
     eng.end_player_turn(); eng.run_enemy_turn(); eng.start_player_turn()
 check("...nor after 2 turns", e.hp, hp0)
-e.block = 0   # cleared right before the bomb lands, not a phase earlier
+e.block = 0
 eng.end_player_turn()
 check("...and detonates at the end of the 3rd", hp0 - e.hp, 40)
 
@@ -326,7 +312,7 @@ eng.start_player_turn()
 check("Rolling Boulder deals 5 on the next turn", hp0 - e.hp, 5)
 hp0 = e.hp
 eng.end_player_turn(); eng.run_enemy_turn()
-e.block = 0   # the bag blocks on its own turn; Boulder lands on start_turn
+e.block = 0
 eng.start_player_turn()
 check("...then 10", hp0 - e.hp, 10)
 
@@ -469,12 +455,10 @@ check("every ANCIENT_COLORLESS card has rarity Ancient", bad_anc, [])
 bad_curse = sorted({f().name for f in CURSE_POOL if f().rarity != "Curse"})
 check("every curse has rarity Curse", bad_curse, [])
 
-# Colorless must never leak into the Ironclad reward tiers.
 iron = {f().name for f in C.CARD_POOL_IRONCLAD}
 leak = sorted(iron & {f().name for f in COLORLESS_POOL})
 check("no Colorless card leaks into CARD_POOL_IRONCLAD", leak, [])
 
-# Unplayable really is unplayable, even with infinite energy.
 eng, p, e = setup()
 unplayable = [mk() for mk in STATUS_CARDS if mk().cost == UNPLAYABLE]
 unplayable += [f() for f in CURSE_POOL if f().cost == UNPLAYABLE]

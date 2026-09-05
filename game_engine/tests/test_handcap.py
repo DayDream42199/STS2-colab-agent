@@ -1,17 +1,8 @@
 # -*- coding: utf-8 -*-
-"""#46: the 10-card hand limit.
-
-Nothing enforced it before, so Retain could hold an unbounded hand and every
-card-generating effect could stack past 10. Source: the wiki's Mechanics
-page ("The maximum number of cards allowed in hand is 10. There is no way to
-exceed this limit.").
-"""
+"""#46: the 10-card hand limit."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -96,7 +87,7 @@ print("=" * 74)
 eng, p, e = setup()
 fill(p, HAND_LIMIT - 1)
 jack = pool("Jack of All Trades")
-jack.upgrade()          # adds 2 Colorless cards
+jack.upgrade()
 p.hand.append(jack)
 eng.play_card(p, jack)
 check("Jack of All Trades+ cannot push past the limit",
@@ -104,14 +95,13 @@ check("Jack of All Trades+ cannot push past the limit",
 
 eng, p, e = setup()
 fill(p, HAND_LIMIT - 1)
-jk = pool("Jackpot")     # adds 3 free cards
+jk = pool("Jackpot")
 p.hand.append(jk)
 eng.play_card(p, jk, target=e)
 check("Jackpot cannot push past the limit", len(p.hand) <= HAND_LIMIT, True)
 check("...and its overflow reached the discard pile",
       len(p.discard_pile) > 0, True)
 
-# An enemy shuffling Statuses into a full hand.
 p = Player("P", 200, 99, deck=make_starter_deck())
 eng = CombatEngine([p], [E.make_myte()], seed=4, scale_enemies=False)
 eng.start_player_turn()
@@ -133,7 +123,7 @@ eng, p, e = setup()
 p.draw_pile = [make_starter_deck()[0] for _ in range(40)]
 sizes = []
 for _ in range(6):
-    p.retain_hand_turns = 1            # hand-wide Retain, every turn
+    p.retain_hand_turns = 1
     eng.end_player_turn(); eng.run_enemy_turn(); eng.start_player_turn()
     sizes.append(len(p.hand))
 check("hand never exceeds the limit across 6 retained turns",
@@ -145,8 +135,6 @@ print()
 print("=" * 74)
 print("Cards that play off the draw pile are NOT hand-limited")
 print("=" * 74)
-# Havoc/Cascade/Mayhem play the top card of the draw pile; it never enters
-# the hand, so a full hand must not cancel them.
 eng, p, e = setup()
 fill(p, HAND_LIMIT)
 p.draw_pile = [pool("Bludgeon") for _ in range(4)]
@@ -168,7 +156,6 @@ hp0 = e.hp
 eng.play_card(p, casc)
 check("Cascade likewise", e.hp < hp0, True)
 
-# take_top_of_draw reshuffles rather than fizzling on an empty draw pile.
 eng, p, e = setup()
 p.draw_pile = []
 p.discard_pile = [make_starter_deck()[0] for _ in range(3)]
@@ -198,7 +185,21 @@ import io as _io
 import re
 offenders = []
 ENGINE_DIR = os.path.join(ROOT, "game_engine")
-for fname in ("cards.py", "relics.py", "potions.py", "enemies.py", "combat.py"):
+# WALK the engine rather than naming files. This check has broken three
+# times on a rename -- cards.py -> cards/, then cards/effects/, then
+# enemies.py -> enemies/ -- and each time the failure mode was the same:
+# name a file that no longer exists and the scan silently covers nothing.
+# Discovering the files means a future split needs no edit here, and the
+# floor assertion below turns "found nothing" into a failure instead of a
+# pass.
+SCANNED = []
+for _root, _dirs, _files in os.walk(ENGINE_DIR):
+    _dirs[:] = [d for d in _dirs if d not in ("__pycache__", "tests")]
+    for _f in sorted(_files):
+        if _f.endswith(".py") and _f != "entities.py":
+            SCANNED.append(os.path.relpath(os.path.join(_root, _f), ENGINE_DIR))
+check("the engine source is actually being scanned", len(SCANNED) >= 20, True)
+for fname in SCANNED:
     src = _io.open(os.path.join(ENGINE_DIR, fname), encoding="utf-8").read()
     for i, line in enumerate(src.split("\n"), 1):
         if re.search(r"\bhand\.append\(", line) and "return_to_hand" not in line:

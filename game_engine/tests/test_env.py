@@ -1,21 +1,8 @@
 # -*- coding: utf-8 -*-
-"""#43 + #44: env.py must agree with the engine it wraps.
-
-#43: the mask, playable_cards and play_card each carried their own copy of
-the play rules, and the copies drifted. This asserts the property directly:
-for every card in hand, under every gate, mask-legal == engine-accepts.
-
-#44: the observation covered 4 enemy slots while the engine allows 12, and
-padded players to 2 while co-op allows 4 -- so on a summoned board the
-agent could neither see nor hit the extra enemies, and at 3-4 players the
-extra players' features sat where a decoder reads enemies.
-"""
+"""#43 + #44: env.py must agree with the engine it wraps."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -74,7 +61,11 @@ def mask_legal_slots(e):
     out = set()
     p = e._current_player()
     for slot in range(min(len(p.hand), ENV.MAX_HAND)):
-        if any(m[slot * ENV.MAX_ENEMIES + t] > 0 for t in range(ENV.MAX_ENEMIES)):
+        enemy_base = slot * ENV.MAX_ENEMIES
+        ally_base = ENV.FIRST_CARD_ALLY_ACTION + slot * ENV.MAX_ALLY_TARGETS
+        if (any(m[enemy_base + t] > 0 for t in range(ENV.MAX_ENEMIES))
+                or any(m[ally_base + t] > 0
+                       for t in range(ENV.MAX_ALLY_TARGETS))):
             out.add(slot)
     return out
 
@@ -97,7 +88,6 @@ print("=" * 74)
 print("The gates that were only ever checked inside play_card")
 print("=" * 74)
 
-# Ringing: "You can only play 1 card this turn."
 e = make_env()
 p = e._current_player()
 p.hand = [make_starter_deck()[0] for _ in range(3)]
@@ -107,19 +97,17 @@ e.engine.play_card(p, p.hand[0], target=e.engine.enemies[0])
 m, g = agree("Ringing, after the 1 allowed card", e)
 check("...and nothing is legal any more", sorted(m), [])
 
-# Smoggy: "You can only play 1 Skill per turn."
 e = make_env()
 p = e._current_player()
 p.hand = [c for c in make_starter_deck() if c.name == "Defend"][:2]
-p.hand += [make_starter_deck()[0]]        # a Strike, still legal
+p.hand += [make_starter_deck()[0]]
 p.add_status(StatusType.SMOGGY, 1)
 agree("Smoggy, before any Skill", e)
 e.engine.play_card(p, p.hand[0])
 m, g = agree("Smoggy, after 1 Skill", e)
 check("...the remaining Skill is blocked, the Attack is not",
-      sorted(m), [1])   # slot 0 left hand when played, so Strike is now slot 1
+      sorted(m), [1])
 
-# Bound (Queen's Chains of Binding)
 e = make_env()
 p = e._current_player()
 p.hand = [make_starter_deck()[0] for _ in range(3)]
@@ -162,7 +150,7 @@ check("...only Enthralled is offered", sorted(m), [1])
 e = make_env()
 p = e._current_player()
 p.hand = [C.make_wound(), pool("Injury"), make_starter_deck()[0]]
-p.energy = 9999            # past the UNPLAYABLE sentinel of 999
+p.energy = 9999
 m, g = agree("unplayables with 9999 energy", e)
 check("...only the real card is offered", sorted(m), [2])
 
@@ -232,8 +220,6 @@ steps = 0
 for seed in range(30):
     def mk_players():
         deck = make_starter_deck()
-        # Salt the deck with the awkward cards so the sweep actually meets
-        # them: a Status, a Curse, a conditional and a play-cap card.
         deck += [C.make_wound(), pool("Injury"), pool("Clash"), pool("Sloth")]
         return [Player("P", 80, 3, deck=deck)]
     e = ENV.CombatEnv(mk_players, lambda: [E.make_nibbit()], seed=seed)
@@ -269,17 +255,14 @@ for n in (1, 2, 3, 4):
     check(f"observation is a fixed {ENV.OBS_SIZE} floats at {n} player(s)",
           len(obs), e.observation_space_size())
 
-# The layout bug: the old version padded players to 2, so with 3-4 players
-# the extra players' features sat where a decoder reads enemies. Total
-# length still came out right, which is exactly why it went unnoticed.
 e = ENV.CombatEnv(
     lambda: [Player(f"P{i}", 80, 3, deck=make_starter_deck()) for i in range(3)],
     lambda: [bag()], seed=1)
 e.reset()
 for p in e.engine.players:
-    p.hp = p.max_hp                      # every player reads 1.0
+    p.hp = p.max_hp
 enemy = e.engine.enemies[0]
-enemy.hp = enemy.max_hp // 4             # enemy reads ~0.25, unmistakable
+enemy.hp = enemy.max_hp // 4
 obs = e._observe()
 check("3 players: enemy 0 sits at the enemy offset, not shifted into it",
       round(float(obs[ENV.OBS_OFFSETS["enemies"][0]]), 2), 0.25)
@@ -288,7 +271,6 @@ check("...and the unused 4th player slot is zeroed",
       [float(x) for x in obs[p4:p4 + ENV.ENTITY_FEATURES]] == [0.0] * ENV.ENTITY_FEATURES,
       True)
 
-# Every living enemy on an over-4 board must be seeable AND hittable.
 e = ENV.CombatEnv(lambda: [Player("P", 200, 99, deck=make_starter_deck())],
                   lambda: [E.make_phrog_parasite()], seed=3)
 e.reset()
@@ -313,9 +295,15 @@ live_slots = [i for i in range(ENV.MAX_ENEMIES)
 check("...and every living enemy is visible in the observation",
       live_slots, alive_idx)
 
-check("action space covers cards, potions and end-turn",
+check("action space covers both card axes and end-turn",
       e.action_space_size(),
-      ENV.CARD_ACTIONS + ENV.POTION_ACTIONS + 1)
+      ENV.CARD_ENEMY_ACTIONS + ENV.CARD_ALLY_ACTIONS + 1)
+check("the enemy and player card axes do not overlap",
+      (ENV.FIRST_CARD_ALLY_ACTION, ENV.END_TURN_ACTION),
+      (ENV.CARD_ENEMY_ACTIONS,
+       ENV.CARD_ENEMY_ACTIONS + ENV.CARD_ALLY_ACTIONS))
+check("potions are out of the action space entirely",
+      hasattr(ENV, "FIRST_POTION_ACTION"), False)
 
 print()
 print("=" * 74)
@@ -340,7 +328,6 @@ p = e._current_player()
 check("observation_space_size matches the vector", len(e._observe()),
       e.observation_space_size())
 
-# The property the whole task exists for.
 p.hand = [make_starter_deck()[0]]
 o_strike = e._observe().copy()
 p.hand = [C.make_wound()]
@@ -348,7 +335,6 @@ o_wound = e._observe().copy()
 check("swapping the hand changes the observation",
       np.array_equal(o_strike, o_wound), False)
 
-# Slot alignment: hand[i] must land at hand offset + i * HAND_FEATURES.
 strike = make_starter_deck()[0]
 defend = [c for c in make_starter_deck() if c.name == "Defend"][0]
 p.hand = [strike, defend]
@@ -362,11 +348,35 @@ check("empty slot 2 is all zeros", slot_feats(obs, 2) == [0.0] * F, True)
 check("occupied flag set on slot 0", feat(obs, 0, "occupied"), 1.0)
 check("occupied flag clear on slot 2", feat(obs, 2, "occupied"), 0.0)
 
+_TARGET_BIT = {
+    TargetMode.SINGLE_ENEMY: "targets_enemy",
+    TargetMode.ALL_ENEMIES: "targets_all_enemies",
+    TargetMode.SELF: "targets_self",
+    TargetMode.ALLY: "targets_ally",
+    TargetMode.SELF_OR_ALLY: "targets_self_or_ally",
+}
+_pool = [f() if callable(f) else f for f in C.CARD_POOL_IRONCLAD]
+_by_mode = {}
+for _c in _pool + make_starter_deck():
+    _by_mode.setdefault(_c.target, _c)
+_bad = []
+for _mode, _card in _by_mode.items():
+    p.hand = [_card]
+    _o = e._observe()
+    _hot = [n for n in ENV.HAND_FEATURE_NAMES
+            if n.startswith("targets_") and _o[HAND_OFF + IDX[n]] > 0]
+    if _hot != [_TARGET_BIT[_mode]]:
+        _bad.append(f"{_card.name} ({_mode.name}): {_hot}")
+check("exactly one targeting bit, and the right one, per card",
+      _bad, [])
+check("...over every targeting mode the pool actually uses",
+      sorted(m.name for m in _by_mode),
+      ["ALLY", "ALL_ENEMIES", "SELF", "SINGLE_ENEMY"])
+
 check("Strike damage is encoded (6/20)", round(feat(obs, 0, "damage"), 3), 0.3)
 check("Defend block is encoded (5/20)", round(feat(obs, 1, "block"), 3), 0.25)
 check("Strike cost is encoded (1/6)", round(feat(obs, 0, "cost"), 3), round(1 / 6, 3))
 
-# Keywords.
 p.hand = [pool("Purity"), pool("Apparition"), pool("Ultimate Strike")]
 obs = e._observe()
 check("Retain is encoded", feat(obs, 0, "retain"), 1.0)
@@ -380,13 +390,11 @@ up.upgrade()
 p.hand = [up]
 check("upgraded flag is encoded", feat(e._observe(), 0, "upgraded"), 1.0)
 
-# Statuses and curses get their own type bits.
 p.hand = [C.make_wound(), pool("Injury")]
 obs = e._observe()
 check("Status type bit", feat(obs, 0, "is_status"), 1.0)
 check("Curse type bit", feat(obs, 1, "is_curse"), 1.0)
 
-# X-cost.
 p.hand = [pool("Volley")]
 obs = e._observe()
 check("X-cost is flagged", feat(obs, 0, "is_x_cost"), 1.0)
@@ -422,8 +430,6 @@ check("slot 1 is Wound's id", int(ids[1]), C.CARD_IDS["Wound"])
 check("empty slots are -1", int(ids[2]), -1)
 check("ids are distinct per card", ids[0] != ids[1], True)
 
-# Every card the engine can put in a hand must have an id, or the embedding
-# table has a hole in it.
 unknown = sorted({f().name for f in every if C.card_id(f()) < 0}
                  | {mk().name for mk in C.STATUS_CARDS if C.card_id(mk()) < 0}
                  | {f().name for f in C.CURSE_POOL if C.card_id(f()) < 0})
@@ -442,16 +448,64 @@ p.hand, p.draw_pile, p.discard_pile, p.exhaust_pile = (
     [make_starter_deck()[0]] * 4, [make_starter_deck()[0]] * 5)
 obs = e._observe()
 lo, hi = ENV.OBS_OFFSETS["piles"]
-piles = [round(float(x), 4) for x in obs[lo:hi]]
-check("hand/draw/discard/exhaust counts are encoded",
-      piles, [round(v, 4) for v in (2 / 10.0, 3 / 30.0, 4 / 30.0, 5 / 30.0)])
+PF0 = len(ENV.PILE_FEATURE_NAMES)
+counts = [round(float(obs[lo + i * PF0]), 4) for i in range(4)]
+check("hand/draw/discard/exhaust totals are still encoded",
+      counts, [round(v, 4) for v in (2 / 10.0, 3 / 30.0, 4 / 30.0, 5 / 30.0)])
 
 print()
 print("=" * 74)
-print("Statuses, relics and potions (#49)")
+print("Teammates are capability counts, not raw hands")
 print("=" * 74)
-import game_engine.relics as R
-import game_engine.potions as PT
+from game_engine.observe import (card_capabilities, summarise_hand,
+                                 ALLY_FEATURE_NAMES, ALLY_FEATURES,
+                                 CAPABILITIES)
+
+_every = ([f() for f in C.CARD_POOL_IRONCLAD]
+          + [f() for f in C.COLORLESS_POOL]
+          + [f() for f in C.CURSE_POOL]
+          + [mk() for mk in C.STATUS_CARDS]
+          + make_starter_deck())
+_uncovered = sorted({c.name for c in _every if not card_capabilities(c)})
+check(f"every one of {len(_every)} pool cards maps to a capability",
+      _uncovered, [])
+_bad = sorted({cap for c in _every for cap in card_capabilities(c)
+               if cap not in CAPABILITIES})
+check("...and only to declared capabilities", _bad, [])
+
+e = make_env(players=3)
+lo, hi = ENV.OBS_OFFSETS["ally_summary"]
+check("the ally block is 3 teammates x 12", hi - lo, 36)
+AIDX = {n: i for i, n in enumerate(ALLY_FEATURE_NAMES)}
+
+
+def mate_feat(obs, slot, name):
+    return float(obs[lo + slot * ALLY_FEATURES + AIDX[name]])
+
+
+mates = e._allies_in_obs_order()
+mates[0].hand = [make_starter_deck()[0]] * 3          # 3 Strikes
+mates[0].energy = 99
+mates[1].hand = [C.make_wound(), C.make_wound()]      # unplayable clutter
+obs = e._observe()
+check("a teammate's attacks are counted",
+      round(mate_feat(obs, 0, "damage") * 10), 3)
+check("...with their damage total",
+      round(mate_feat(obs, 0, "total_damage") * 100), 18)
+check("held clutter shows as `dead`",
+      round(mate_feat(obs, 1, "dead") * 10), 2)
+check("...and contributes no damage",
+      mate_feat(obs, 1, "total_damage"), 0.0)
+
+e1 = make_env(players=1)
+o1 = e1._observe()
+check("solo leaves the whole ally block at zero",
+      float(sum(abs(x) for x in o1[lo:hi])), 0.0)
+
+print()
+print("=" * 74)
+print("Statuses (#49)")
+print("=" * 74)
 
 SIDX = {n: i for i, n in enumerate(ENV.STATUS_CHANNEL_NAMES)}
 
@@ -477,7 +531,6 @@ check("player Strength is encoded (5/10)",
 check("enemy Vulnerable is encoded (3/10)",
       round(sfeat(o2, "enemies", 0, "vulnerable"), 3), 0.3)
 
-# Folded channels: the observation must show the same net number the rules use.
 e = make_env()
 p = e._current_player()
 p.add_status(StatusType.STRENGTH, 6)
@@ -491,7 +544,7 @@ check("...and matches what deal_attack_damage actually uses",
 
 e = make_env()
 p = e._current_player()
-p.add_status(StatusType.SHRINK, 4)      # a debuff outside the folded set
+p.add_status(StatusType.SHRINK, 4)
 obs = e._observe()
 check("an unfolded debuff still shows up in other_debuffs",
       sfeat(obs, "players", 0, "other_debuffs") > 0, True)
@@ -517,73 +570,38 @@ check("action-restricting statuses are visible",
       round(sfeat(e._observe(), "players", 0, "restricted"), 3), 0.1)
 
 print()
-print("relics")
+print("piles by composition")
 e = make_env()
 p = e._current_player()
-lo, hi = ENV.OBS_OFFSETS["relics"]
-check("no relics -> all zero", float(sum(e._observe()[lo:hi])), 0.0)
-p.add_relic(R.BURNING_BLOOD)
+lo, hi = ENV.OBS_OFFSETS["piles"]
+PF = len(ENV.PILE_FEATURE_NAMES)
+PIDX = {n: i for i, n in enumerate(ENV.PILE_FEATURE_NAMES)}
+check("the pile block is 4 piles x 8 features", hi - lo, 32)
+
+
+def pile_feat(obs, pile_name, feat):
+    base = lo + ENV.PILE_NAMES.index(pile_name) * PF
+    return float(obs[base + PIDX[feat]])
+
+
+p.hand = [make_starter_deck()[0]] * 3          # 3 Strikes
+p.draw_pile = [c for c in make_starter_deck() if c.name == "Defend"][:4]
+p.discard_pile = []
+p.exhaust_pile = []
 obs = e._observe()
-check("a held relic sets exactly its own bit", float(sum(obs[lo:hi])), 1.0)
-check("...at the right index",
-      float(obs[lo + R.RELIC_IDS["Burning Blood"]]), 1.0)
-check("every relic in the pool has an id",
-      sorted({r.name for r in R.RELIC_POOL_IRONCLAD if R.relic_id(r) < 0}), [])
-check("relic ids are name-sorted", list(R.RELIC_IDS) == sorted(R.RELIC_IDS), True)
+check("hand counts 3 attacks", round(pile_feat(obs, "hand", "attacks") * 10), 3)
+check("hand counts 0 skills", round(pile_feat(obs, "hand", "skills") * 10), 0)
+check("draw counts 4 skills", round(pile_feat(obs, "draw", "skills") * 30), 4)
+check("draw counts 0 attacks", round(pile_feat(obs, "draw", "attacks") * 30), 0)
+check("hand carries its damage total",
+      round(pile_feat(obs, "hand", "damage") * 100), 18)
+check("draw carries its block total",
+      round(pile_feat(obs, "draw", "block") * 100), 20)
+check("an empty pile is all zeros",
+      [round(pile_feat(obs, "exhaust", f), 6)
+       for f in ENV.PILE_FEATURE_NAMES], [0.0] * PF)
 
-print()
-print("potions in the observation")
-e = make_env()
-p = e._current_player()
-lo, hi = ENV.OBS_OFFSETS["potions"]
-check("empty belt -> all zero", float(sum(e._observe()[lo:hi])), 0.0)
-fire = [x for x in PT.POTION_POOL_IRONCLAD if x.name == "Fire Potion"][0]
-block = [x for x in PT.POTION_POOL_IRONCLAD if x.name == "Block Potion"][0]
-p.potions = [fire, block]
-obs = e._observe()
-check("two potions set two bits", float(sum(obs[lo:hi])), 2.0)
-check("slot 0 holds Fire Potion",
-      float(obs[lo + 0 * PT.TOTAL_POTION_IDS + PT.POTION_IDS["Fire Potion"]]), 1.0)
-check("slot 1 holds Block Potion",
-      float(obs[lo + 1 * PT.TOTAL_POTION_IDS + PT.POTION_IDS["Block Potion"]]), 1.0)
-check("...and the two are distinguishable per slot",
-      float(obs[lo + 0 * PT.TOTAL_POTION_IDS + PT.POTION_IDS["Block Potion"]]), 0.0)
-check("every potion has an id",
-      sorted({x.name for x in PT.POTION_POOL_IRONCLAD + PT.SPECIAL_POTIONS
-              if PT.potion_id(x) < 0}), [])
 
-print()
-print("the potion ACTION")
-e = make_env()
-p = e._current_player()
-p.potions = []
-m = e.legal_action_mask()
-check("empty belt offers no potion action",
-      float(m[ENV.FIRST_POTION_ACTION:ENV.END_TURN_ACTION].sum()), 0.0)
-
-p.potions = [block]      # target "none": one action, slot 0 target 0
-m = e.legal_action_mask()
-check("a self-target potion offers exactly one action",
-      float(m[ENV.FIRST_POTION_ACTION:ENV.END_TURN_ACTION].sum()), 1.0)
-p.block = 0
-_, reward, _, _ = e.step(ENV.FIRST_POTION_ACTION)
-check("...and drinking it works", p.block > 0, True)
-check("...consuming the potion", len(p.potions), 0)
-check("...with no illegal-action penalty", reward > -1.0, True)
-
-e = make_env()
-p = e._current_player()
-p.potions = [fire]       # target "enemy": one action per living enemy
-m = e.legal_action_mask()
-alive = len(e.engine.enemies_alive())
-check("an enemy-target potion offers one action per living enemy",
-      float(m[ENV.FIRST_POTION_ACTION:ENV.END_TURN_ACTION].sum()), float(alive))
-hp0 = e.engine.enemies[0].hp
-e.step(ENV.FIRST_POTION_ACTION)
-check("...and it damages the chosen enemy", e.engine.enemies[0].hp < hp0, True)
-
-# Potion actions must obey the same "masked-legal always works" property the
-# card actions do.
 rng2 = np.random.default_rng(7)
 penalties = 0
 steps2 = 0
@@ -594,7 +612,6 @@ for seed in range(20):
     ee = ENV.CombatEnv(mk_players, lambda: [E.make_nibbit()], seed=seed)
     ee.reset()
     pp = ee._current_player()
-    pp.potions = [fire, block, PT.SPECIAL_POTIONS[0]]
     done, guard = False, 0
     while not done and guard < 300:
         guard += 1
@@ -604,7 +621,7 @@ for seed in range(20):
         steps2 += 1
         if rew <= -1.0 and not done:
             penalties += 1
-check(f"no illegal-action penalty across {steps2} masked steps WITH potions",
+check(f"no illegal-action penalty across {steps2} masked steps",
       penalties, 0)
 
 print()

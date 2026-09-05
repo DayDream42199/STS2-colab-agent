@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Task #41: verify every status against Module:Powers/StS2_data/{Common,Debuff},
-the authoritative definitions."""
+"""Task #41: verify every status against Module:Powers/StS2_data/{Common,Debuff}, the authoritative..."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -54,8 +50,6 @@ def setup(enemies=None, hp=500):
 print("=" * 74)
 print('Regen: "at the END of your turn, heal X HP, then reduce Regen by 1"')
 print("=" * 74)
-# Battle Friend does literally nothing, so the enemy phase can't muddy the
-# HP readings across turns.
 eng, p, e = setup([E.make_battle_friend_v1()])
 p.hp = 100
 p.add_status(StatusType.REGEN, 5)
@@ -74,7 +68,7 @@ print('Ritual: "at the END of its turn, gains X Strength"')
 print("=" * 74)
 cultist = E.make_calcified_cultist()
 eng, p, _ = setup([cultist])
-eng.end_player_turn(); eng.run_enemy_turn()      # Incantation: gains 2 Ritual
+eng.end_player_turn(); eng.run_enemy_turn()
 check("Incantation grants 2 Ritual", cultist.get_status(StatusType.RITUAL), 2)
 check("...and Ritual pays out at the END of that same turn",
       cultist.get_status(StatusType.STRENGTH), 2)
@@ -101,7 +95,7 @@ print('Shrink: "attacks deal 30% less damage... after 3 turns"')
 print("=" * 74)
 beetle = E.make_shrinker_beetle()
 eng, p, _ = setup([beetle])
-eng.end_player_turn(); eng.run_enemy_turn()      # Shrinker
+eng.end_player_turn(); eng.run_enemy_turn()
 check("Shrinker applies 3 turns of Shrink", p.get_status(StatusType.SHRINK), 3)
 check("...cutting attack damage 30%", p.deal_attack_damage(10), 7)
 for expected in (2, 1, 0):

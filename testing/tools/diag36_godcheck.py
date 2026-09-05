@@ -1,15 +1,5 @@
 # -*- coding: utf-8 -*-
-"""#36 diagnostic 2: are the never-won fights UNWINNABLE, or just beyond
-greedy_policy?
-
-Every encounter that stayed at ~0% even on deck tier 3 gets re-run with a
-deliberately absurd loadout: 250 HP, 30 extra pool cards all upgraded, 10
-relics, 6 energy. No real run looks like this -- that is the point. A fight
-that is still 0% here has something wrong with it (an unkillable state, a
-revive loop, a damage race that cannot be won). A fight that becomes
-winnable is correctly ported and simply out of reach of a policy that never
-plans ahead.
-"""
+"""#36 diagnostic 2: are the never-won fights UNWINNABLE, or just beyond greedy_policy?"""
 import sys, io, contextlib, random
 import os
 import sys
@@ -40,7 +30,7 @@ SUSPECTS = [
 
 def god_run(make_enemies, seed):
     random.seed(seed)
-    seed_content(seed)   # enemy HP has its own stream now -- see enemies.py
+    seed_content(seed)
     rng = random.Random(seed)
     deck = make_starter_deck()
     for _ in range(30):

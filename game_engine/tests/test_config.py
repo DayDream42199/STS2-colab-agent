@@ -1,15 +1,5 @@
 # -*- coding: utf-8 -*-
-"""config.json actually restricts what it says it restricts.
-
-WHY THIS MATTERS. A config system whose settings are silently ignored is
-worse than no config system: the setup screen says "Strike and Defend only",
-the player believes it, and a Perfected Strike turns up in the first reward
-screen. So this checks that each switch BINDS, not merely that it parses.
-
-It also checks the failure modes, because a UI writing this file will get it
-wrong sometimes and needs a message naming the key rather than a traceback
-from somewhere inside the engine.
-"""
+"""config.json actually restricts what it says it restricts."""
 import io
 import json
 import os
@@ -56,14 +46,8 @@ def expect_error(label, d):
 
 
 print("1. the repo's own config.json is valid; an EMPTY one means 'full game'")
-# config.json is a settings file a player is meant to edit, so asserting its
-# CONTENTS would fail the suite the moment someone switches to co-op or turns
-# relics off -- a legitimate edit reported as a broken build. What is worth
-# guarding is that whatever is in there still parses and validates.
 shipped = config.load(os.path.join(ROOT, "config.json"), quiet=True)
 check("config.json parses and validates", isinstance(shipped, dict), True)
-# The "full game by default" promise belongs to a config that asks for
-# nothing, which is fixed and safe to assert on.
 bare = write({})
 check("an empty config switches nothing off",
       sorted(k for k, v in bare["content"].items() if not v), [])
@@ -158,8 +142,6 @@ check("describe lists the allowed cards", "Strike" in text, True)
 
 print()
 print("10. the `simple` section (simple.py's cut-down game)")
-# Same reasoning as section 1: assert the FALLBACK is solo, not that the
-# player has left their own config.json set to one hero.
 kw = config.simple_kwargs(write({}))
 check("defaults are solo", kw["players"], 1)
 check("scale_enemy defaults to null (= auto)", kw["scale_enemy"], None)

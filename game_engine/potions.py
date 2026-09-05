@@ -1,37 +1,4 @@
-"""
-Potion model + a real Ironclad-relevant potion pool, sourced from the wiki
-the same way cards/enemies/relics were: `slaythespire.wiki.gg`'s
-Potions_List page. Players start with 3 potion slots (wiki-confirmed);
-Ascension-scaled slot counts aren't modeled (this replica has no
-Ascension system at all).
-
-Unlike relics (persistent, standing effects), potions are single-use
-consumables: `Player.potions` is the inventory (capped at
-`Player.potion_slots`), and using one in play.py removes it and calls its
-`effect(engine, player, target=None)` immediately -- no on_pickup/
-on_turn_start/etc. hooks needed. A potion's effect function CAN still
-call `player.register_hook(...)` directly if it needs a delayed or
-multi-turn effect (Clarity Extract, Radiant Tincture) -- register_hook
-isn't relic-specific, any code holding a `player` reference can use it.
-
-Deliberately NOT ported, same discipline as relics.py -- see README's
-known gaps for the full list: potions needing other classes' unbuilt
-resource systems (Focus/Orbs, Star, Doom, Forge/Summon), a temporary/
-combat-scoped card upgrade distinct from the permanent `Card.upgraded`
-flag (Blessing of the Forge -- upgrading a HAND card mutates the same
-Card object that lives in deck_template, since start_combat() only
-shallow-copies the deck list, not the Card objects themselves, so a
-"real" .upgrade() there would incorrectly persist forever), a temporary
-cost override on an EXISTING deck card for the same shallow-copy reason
-(Touch of Insanity -- Attack/Skill/Power Potion avoid this by creating a
-disposable one-off Card instance that never enters deck_template, same
-trick as the Vexing Puzzlebox relic), per-card "Replay" (Soldier's Stew),
-a "retain hand" mechanic (Stable Serum), hand-cost randomization that
-would need the same disposable-vs-persistent-instance care as above
-(Snecko Oil), an unbuilt "Buffer" status (Lucky Tonic), and "take an
-extra turn" (Ambergris -- would need real turn-loop reentrancy in
-play.py, not just a Potion effect function).
-"""
+"""Potion model + a real Ironclad-relevant potion pool, sourced from the wiki the same way..."""
 
 from dataclasses import dataclass
 from typing import Callable
@@ -45,18 +12,12 @@ class Potion:
     name: str
     rarity: str
     description: str
-    target: str  # "self" | "enemy" | "all_enemies" | "none"
-    effect: Callable  # (engine, player, target=None) -> None
+    target: str
+    effect: Callable
 
 
 def _make_disposable_card_from_pool(card_type, rng):
-    """Same trick as the Vexing Puzzlebox relic: a fresh Card instance,
-    cost forced to 0, that's added directly to hand and never touches
-    deck_template -- safe to mutate freely since nothing else references it.
-
-    `rng` is the drinking player's own rng (see the module note on seeding).
-    It is a required parameter rather than defaulting to the global `random`
-    module, so a future caller cannot silently reintroduce an unseeded draw."""
+    """Same trick as the Vexing Puzzlebox relic: a fresh Card instance, cost forced to 0, that's added..."""
     candidates = FACTORIES_BY_TYPE.get(card_type)
     if not candidates:
         return None
@@ -66,13 +27,9 @@ def _make_disposable_card_from_pool(card_type, rng):
     return card
 
 
-# ---------------------------------------------------------------------------
-# Common
-# ---------------------------------------------------------------------------
-
 def _add_disposable_card(engine, player, card_type, potion_name):
     card = _make_disposable_card_from_pool(card_type, player.rng)
-    if card is None:   # no card of that type in the pool -- fizzle, don't crash
+    if card is None:
         engine.log.append(f"{potion_name} finds no card to add, fizzles")
         return
     player.add_to_hand(card)
@@ -155,25 +112,13 @@ def _blood_potion(engine, player, target=None):
     engine.log.append(f"{player.name} heals {player.hp - before} HP (Blood Potion)")
 
 
-# ---------------------------------------------------------------------------
-# Special (Potion-Shaped Rock is needed for the Petrified Toad relic)
-# ---------------------------------------------------------------------------
-
 def _potion_shaped_rock(engine, player, target=None):
     if target is not None and target.alive:
         target.take_damage(15, source_is_attack=False, log=engine.log, label="Potion-Shaped Rock")
 
 
-# "Special" rarity, like Ambergris/Foul Potion/Glowwater Potion -- not part
-# of the normal reward pool below, only obtainable via a specific source
-# (here, the Petrified Toad relic). Exported standalone, mirroring how
-# relics.py exports BURNING_BLOOD outside RELIC_POOL_IRONCLAD.
 POTION_SHAPED_ROCK = Potion("Potion-Shaped Rock", "Special", "Deal 15 damage.", "enemy", _potion_shaped_rock)
 
-
-# ---------------------------------------------------------------------------
-# Uncommon
-# ---------------------------------------------------------------------------
 
 def _fysh_oil(engine, player, target=None):
     player.add_status(StatusType.STRENGTH, 1)
@@ -187,7 +132,7 @@ def _regen_potion(engine, player, target=None):
 
 
 def _fortifier(engine, player, target=None):
-    gained = player.gain_block_noncard(player.block * 2)  # triples total: existing + 2x more
+    gained = player.gain_block_noncard(player.block * 2)
     engine.log.append(f"{player.name} triples their Block (now {player.block}) (Fortifier)")
 
 
@@ -230,18 +175,11 @@ def _gamblers_brew(engine, player, target=None):
 
 
 def _ashwater(engine, player, target=None):
-    """Real Ashwater lets the player choose how many/which cards to
-    Exhaust. This replica's potion-use UI (play.py) doesn't have a
-    multi-select prompt, so it Exhausts the player's WHOLE current hand --
-    a reasonable, clearly-documented simplification, not a silent one."""
+    """Real Ashwater lets the player choose how many/which cards to Exhaust."""
     for card in list(player.hand):
         engine.exhaust_card(player, card)
     engine.log.append(f"{player.name} exhausts their whole Hand (Ashwater -- simplified: no partial-select UI)")
 
-
-# ---------------------------------------------------------------------------
-# Rare
-# ---------------------------------------------------------------------------
 
 def _fruit_juice(engine, player, target=None):
     player.max_hp += 5
@@ -271,12 +209,7 @@ def _bottled_potential(engine, player, target=None):
 
 
 def _fairy_in_a_bottle(engine, player, target=None):
-    """Same pattern as the Lizard Tail relic (revive once), but this is a
-    single-use consumable discarded on use rather than a standing relic --
-    installed via a plain hp_lost hook, no relic_counters flag needed
-    since the potion itself is removed from inventory once used, and this
-    hook naturally only exists for the rest of THIS combat (start_combat()
-    wipes player.hooks every fight)."""
+    """Same pattern as the Lizard Tail relic (revive once), but this is a single-use consumable..."""
     fired = {"done": False}
 
     def _on_hp_lost(engine, player, **kwargs):
@@ -290,33 +223,18 @@ def _fairy_in_a_bottle(engine, player, target=None):
     engine.log.append(f"{player.name} feels a fairy watching over them (Fairy in a Bottle)")
 
 
-# ---------------------------------------------------------------------------
-# Pools
-# ---------------------------------------------------------------------------
-
-
-
-# ---------------------------------------------------------------------------
-# The "port everything" batch: the 22 potions previously deferred. Each was
-# blocked on a named engine feature; those now exist (see README).
-# ---------------------------------------------------------------------------
-
 def _colorless_potion(engine, player, target=None):
-    """Choose 1 of 3 random Colorless cards to add into your Hand. It's free
-    to play this turn. No UI to choose, so it takes the first of the 3 --
-    same simplification the Attack/Skill/Power Potions already use."""
+    """Choose 1 of 3 random Colorless cards to add into your Hand."""
     from .cards import COLORLESS_POOL
     picks = player.rng.sample(COLORLESS_POOL, k=min(3, len(COLORLESS_POOL)))
     card = picks[0]()
-    card.cost = 0        # a fresh instance, never in deck_template: safe to mutate
+    card.cost = 0
     player.add_to_hand(card)
     engine.log.append(f"{player.name} adds {card.name} (free this turn) to their Hand (Colorless Potion)")
 
 
 def _blessing_of_the_forge(engine, player, target=None):
-    """Upgrade all cards in your Hand for the rest of combat. This was
-    deferred specifically because a bare card.upgrade() on a hand card would
-    persist for the whole run; upgrade_for_combat() reverts it at combat end."""
+    """Upgrade all cards in your Hand for the rest of combat."""
     n = sum(1 for c in player.hand if player.upgrade_for_combat(c))
     engine.log.append(f"{player.name} upgrades {n} card(s) for this combat (Blessing of the Forge)")
 
@@ -350,8 +268,7 @@ def _stable_serum(engine, player, target=None):
 
 
 def _touch_of_insanity(engine, player, target=None):
-    """Choose a card in your Hand. It is free to play this combat. Auto-picks
-    the most expensive card, which is the only choice worth making."""
+    """Choose a card in your Hand."""
     playable = [c for c in player.hand if c.current_cost() != "X"]
     if not playable:
         engine.log.append("Touch of Insanity finds no card to discount, fizzles")
@@ -362,10 +279,7 @@ def _touch_of_insanity(engine, player, target=None):
 
 
 def _beetle_juice(engine, player, target=None):
-    """Enemy's attacks deal 30% less damage for the next 4 turns. Mechanically
-    identical to the Shrink debuff this replica already models (a flat 0.7
-    outgoing multiplier), so it reuses it with a 4-turn duration rather than
-    adding a second status with the same numbers."""
+    """Enemy's attacks deal 30% less damage for the next 4 turns."""
     if target is not None and target.alive:
         target.add_status(StatusType.SHRINK, 4, applier=player)
         engine.log.append(f"{target.name}'s attacks deal 30% less for 4 turns (Beetle Juice)")
@@ -381,8 +295,7 @@ def _distilled_chaos(engine, player, target=None):
 
 
 def _droplet_of_precognition(engine, player, target=None):
-    """Choose a card in your Draw Pile and add it into your Hand. No UI, so
-    it takes the top card."""
+    """Choose a card in your Draw Pile and add it into your Hand."""
     if not player.draw_pile:
         engine.log.append("Droplet of Precognition finds an empty draw pile, fizzles")
         return
@@ -406,8 +319,7 @@ def _gigantification_potion(engine, player, target=None):
 
 
 def _liquid_memories(engine, player, target=None):
-    """Put a card from your Discard Pile into your Hand. It costs 0 this
-    turn. Auto-picks the most expensive card in the discard pile."""
+    """Put a card from your Discard Pile into your Hand."""
     if not player.discard_pile:
         engine.log.append("Liquid Memories finds an empty discard pile, fizzles")
         return
@@ -425,8 +337,7 @@ def _lucky_tonic(engine, player, target=None):
 
 
 def _orobic_acid(engine, player, target=None):
-    """Add a random Attack, Skill, and Power into your Hand. They're free to
-    play this turn."""
+    """Add a random Attack, Skill, and Power into your Hand."""
     for ctype in (CardType.ATTACK, CardType.SKILL, CardType.POWER):
         _add_disposable_card(engine, player, ctype, "Orobic Acid")
 
@@ -439,9 +350,7 @@ def _shackling_potion(engine, player, target=None):
 
 
 def _snecko_oil(engine, player, target=None):
-    """Draw 7 cards. Randomize the cost of cards in your Hand this turn.
-    The randomized costs go through set_temp_cost so they revert -- writing
-    card.cost directly would randomize the deck permanently."""
+    """Draw 7 cards."""
     engine.draw_extra(player, 7)
     for c in player.hand:
         if c.current_cost() == "X":
@@ -470,9 +379,7 @@ def _ambergris(engine, player, target=None):
 
 
 def _foul_potion(engine, player, target=None):
-    """Deal 12 damage to EVERYONE -- enemies AND players, the user included.
-    The 'throw it at the Merchant for 100 Gold' half needs a shop, which
-    this replica has no concept of."""
+    """Deal 12 damage to EVERYONE -- enemies AND players, the user included."""
     for e in engine.enemies_alive():
         e.take_damage(12, source_is_attack=False, log=engine.log, label="Foul Potion")
     for p in engine.players_alive():
@@ -488,7 +395,6 @@ def _glowwater_potion(engine, player, target=None):
 
 
 POTION_POOL_IRONCLAD = [
-    # Common (Any class)
     Potion("Attack Potion", "Common", "Choose 1 of 3 random Attack cards to add into your Hand. It's free to play this turn.", "none", _attack_potion),
     Potion("Skill Potion", "Common", "Choose 1 of 3 random Skill cards to add into your Hand. It's free to play this turn.", "none", _skill_potion),
     Potion("Power Potion", "Common", "Choose 1 of 3 random Power cards to add into your Hand. It's free to play this turn.", "none", _power_potion),
@@ -503,10 +409,8 @@ POTION_POOL_IRONCLAD = [
     Potion("Swift Potion", "Common", "Draw 3 cards.", "none", _swift_potion),
     Potion("Vulnerable Potion", "Common", "Apply 3 Vulnerable.", "enemy", _vulnerable_potion),
     Potion("Weak Potion", "Common", "Apply 3 Weak.", "enemy", _weak_potion),
-    # Common (Ironclad)
     Potion("Blood Potion", "Common (Ironclad)", "Heal for 20% of your Max HP.", "none", _blood_potion),
 
-    # Uncommon
     Potion("Fysh Oil", "Uncommon", "Gain 1 Strength and 1 Dexterity.", "none", _fysh_oil),
     Potion("Regen Potion", "Uncommon", "Gain 5 Regen.", "none", _regen_potion),
     Potion("Fortifier", "Uncommon", "Triple your Block.", "none", _fortifier),
@@ -517,13 +421,11 @@ POTION_POOL_IRONCLAD = [
     Potion("Gambler's Brew", "Uncommon", "Discard any number of cards, then draw that many.", "none", _gamblers_brew),
     Potion("Ashwater", "Uncommon (Ironclad)", "Exhaust any number of cards in your Hand.", "none", _ashwater),
 
-    # Rare
     Potion("Fruit Juice", "Rare", "Gain 5 Max HP.", "none", _fruit_juice),
     Potion("Ship in a Bottle", "Rare", "Gain 10 Block. Next turn, gain 10 Block.", "none", _ship_in_a_bottle),
     Potion("Mazaleth's Gift", "Rare", "Gain 1 Ritual.", "none", _mazaleths_gift),
     Potion("Bottled Potential", "Rare", "Shuffle ALL your cards into your Draw Pile. Draw 5 cards.", "none", _bottled_potential),
     Potion("Fairy in a Bottle", "Rare", "When your HP would be reduced to 0, instead this potion is discarded and you heal to 30% of your Max HP.", "none", _fairy_in_a_bottle),
-    # --- the "port everything" batch ---
     Potion("Colorless Potion", "Common", "Choose 1 of 3 random Colorless cards to add into your Hand. It's free to play this turn.", "none", _colorless_potion),
     Potion("Blessing of the Forge", "Uncommon", "Upgrade all cards in your Hand for the rest of combat.", "none", _blessing_of_the_forge),
     Potion("Clarity Extract", "Uncommon", "Draw 1 card. At the start of your next 3 turns, draw 1 additional card.", "none", _clarity_extract),
@@ -545,18 +447,12 @@ POTION_POOL_IRONCLAD = [
     Potion("Soldier's Stew", "Rare (Ironclad)", "All cards containing Strike gain 1 Replay this combat.", "none", _soldiers_stew),
 ]
 
-# Special tier: obtainable only from specific sources, never the normal
-# reward pool -- same treatment as POTION_SHAPED_ROCK above.
 AMBERGRIS = Potion("Ambergris", "Special", "Heal for 50% of your max HP. If used in combat, take an extra turn.", "none", _ambergris)
 FOUL_POTION = Potion("Foul Potion", "Special", "Deal 12 damage to EVERYONE.", "none", _foul_potion)
 GLOWWATER_POTION = Potion("Glowwater Potion", "Special", "Exhaust your Hand. Draw 10 cards.", "none", _glowwater_potion)
 SPECIAL_POTIONS = [POTION_SHAPED_ROCK, AMBERGRIS, FOUL_POTION, GLOWWATER_POTION]
 
 
-# ---------------------------------------------------------------------------
-# Stable potion ids, for env.py's observation. Same contract as
-# cards.CARD_IDS / relics.RELIC_IDS.
-# ---------------------------------------------------------------------------
 ALL_POTIONS = sorted({p.name for p in POTION_POOL_IRONCLAD}
                      | {p.name for p in SPECIAL_POTIONS})
 POTION_IDS = {name: i for i, name in enumerate(ALL_POTIONS)}

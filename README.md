@@ -10,7 +10,7 @@ the trusted source over the human-written summary pages. Where something is
 approximated or unverified, it is flagged in code comments and in
 [Scope](#scope--what-is-deliberately-not-here).
 
-**Status:** all three acts ported, <!--test_suites-->21<!--/--> test suites, reproducible from a
+**Status:** all three acts ported, <!--test_suites-->22<!--/--> test suites, reproducible from a
 seed, ~7.5k env steps/sec single-threaded.
 
 ---
@@ -33,7 +33,7 @@ anything.
 
 ```
 game_engine/   the rules and content, plus the RL environment
-  tests/       the 21 suites, beside the code they verify
+  tests/       the 22 suites, beside the code they verify
 testing/       ways to drive it: play, benchmark, demo, sandbox, trainer
   tools/       diagnostics kept because each produced a figure quoted here
 config.json    what play.py loads: restrictions, party, encounter
@@ -45,12 +45,60 @@ config.json    what play.py loads: restrictions, party, encounter
 |---|---|
 | `statuses.py` | Status effects with real stack-type × turn-behaviour metadata, plus the shared status arithmetic (`net_strength`, damage/block multipliers) |
 | `entities.py` | `Entity` → `Player`/`Enemy`: HP, block, damage resolution, the event-hook registry, and the content RNG |
-| `cards.py` | `Card` model with upgrade/X-cost/dynamic-cost support, and the complete <!--ironclad_cards-->91<!--/-->-card Ironclad list |
-| `enemies.py` | Movesets with telegraphed intents, and real multiplayer HP/block scaling |
+| `cards/` | `Card` model with upgrade/X-cost/dynamic-cost support, and the complete <!--ironclad_cards-->91<!--/-->-card Ironclad list — split into `model` / `effects` / `tokens` / `pools` |
+| `enemies/` | Movesets with telegraphed intents, and real multiplayer HP/block scaling — one module per region |
 | `relics.py` | `Relic` model + <!--relics-->83<!--/--> wiki-sourced relics |
 | `potions.py` | `Potion` model + all <!--potions-->52<!--/--> Ironclad-relevant potions |
 | `combat.py` | `CombatEngine`: runs 1–4 players vs N enemies; owns the play-legality rules |
 | `env.py` | `CombatEnv` / `GymnasiumEnv`: the machine-player interface |
+
+`cards/` is a package, imported exactly as the old flat module was —
+`import game_engine.cards as C` and `from game_engine.cards import Card` both
+still work, and no name it used to export was lost.
+
+| module | holds |
+|---|---|
+| `model.py` | `CardType`, `TargetMode`, the rarity tables, the `Card` dataclass |
+| `effects/` | every `fx_*` — what a card actually does, split by source |
+| `tokens.py` | Status, curse and token card factories (Wound, Burn, Slimed…) |
+| `pools.py` | the card tables and the decks built from them |
+
+`effects/` splits again by where the card comes from, because one file of 195
+functions is not a file anyone reads:
+
+| module | effects |
+|---|---|
+| `ironclad.py` | 93 |
+| `colorless.py` | 100 |
+| `status.py` | 4 — Status and Curse cards |
+| `common.py` | 10 — helpers the others share |
+
+The grouping is not by hand: each effect went to the module for the pool that
+actually references it, computed from the tables.
+
+`enemies/` splits the same way, by region:
+
+| module | enemies |
+|---|---|
+| `overgrowth.py` | 27 — Act 1 |
+| `hive.py` | 22 — Act 2 |
+| `underdocks.py` | 20 — Act 1 |
+| `glory.py` | 19 — Act 3 |
+| `summons.py` | 11 — only ever spawned mid-fight |
+| `events.py` | 4 |
+| `model.py` / `shared.py` | the `Enemy` model, scaling, shared move builders |
+
+Also computed, not chosen: each factory was placed by the region of the
+encounters referencing it, and **all 92 encounter-referenced enemies mapped
+to exactly one region** — no enemy straddles two. The 11 no encounter names
+are summons, and every summoner points into that module, never sideways.
+
+The import order is the dependency order: `pools` builds `Card`s out of the
+effects, so those must exist first. Twelve effects need a pool table back
+(Discovery draws from `CARD_POOL_IRONCLAD`), and those use a **deferred
+import inside the function** — the cycle is real, and hiding it behind a
+module-level trick would make `effects.py` unreadable to exactly the person
+this split is for.
 
 ### `testing/` — everything that drives the engine
 
@@ -60,7 +108,8 @@ config.json    what play.py loads: restrictions, party, encounter
 | `bench.py` | Difficulty measurement and balance-regression detection. Imports `play` to drive the real gauntlet |
 | `demo.py` | Scripted showcase: card-pool smoke test, co-op battle, random RL episode |
 | `simple.py` | The cut-down game — Strike and Defend only, 1–4 heroes — plus a 3-action `SimpleEnv` |
-| `train_simple.py` | A pure-numpy REINFORCE agent for `simple.py`, saved to `simple_agent.npz` |
+| `train_torch.py` | A PyTorch REINFORCE agent for `simple.py`, solo by default, saved to `simple_agent.pt` |
+| `net/` | Networked co-op: one server terminal, one client terminal per player |
 
 **Why `bench.py` is here rather than in `game_engine/`:** it calls
 `play.run_gauntlet()` to measure the curve players actually get. Putting it in
@@ -96,6 +145,54 @@ Ironclad>
 Co-op uses a free-choice "Whose turn?" menu each cycle rather than a fixed
 P1-then-P2 order — one terminal has one input stream, so true simultaneous
 input isn't possible, but you are not locked into a sequence.
+
+### Networked co-op — one terminal per player
+
+`testing/net/` replaces the shared terminal with real separate seats.
+
+```bash
+python testing/net/server.py --players 2            # the full game
+python testing/net/server.py --simple --players 2   # simple.py instead
+python testing/net/client.py --name Alice           # one per player
+```
+
+`--host` / `--port` / `--seed` on the server, `--host` / `--port` / `--name`
+on the client. Party and encounter come from `config.json`; `--simple` reads
+its `simple` section instead.
+
+**Both games are served over the same protocol, by the same client.** They
+sit behind one adapter (`net/games.py`) so the loop, the refusals and the
+networking exist once: `FullGame` is 221 action ids and the real card pool,
+`SimpleGame` is 3 ids and Strike/Defend. The client cannot tell them apart
+and does not need to.
+
+**The server owns the engine, and the action space is the wire protocol.** A
+client sends an id from the <!--action_space-->161<!--/-->-id space and nothing else — never a card
+name, never what should happen. Every id is checked against whose turn it is,
+then against `legal_action_mask()`, before it reaches the engine. That mask
+is already asserted correct by `test_env.py`, so it is the anti-cheat rather
+than new code to trust.
+
+**Anyone can act at any time.** There is no turn order — every player may
+play cards whenever they like during the round. Sending `end turn` takes
+*that player* out for the round; the enemy phase runs only once everyone has
+ended, and then everyone is live again. That is closer to how co-op actually
+plays than making P2 wait on P1.
+
+**Moves are one per card, not one per card × target.** With two enemies on
+the board, Strike is a single entry that then asks *which*; a card with only
+one possible target sends immediately and asks nothing. Six moves shown where
+the action space has nine ids.
+
+Each client sees an egocentric view — itself first, its own hand only, and
+its own legal moves, never anyone else's. `test_net.py` runs a real server
+over real sockets and checks the refusals (illegal, out-of-range, non-integer,
+acting after ending) and that the round advances only when *all* players have
+ended.
+
+The client holds **no rules**. It renders what it is sent and posts back an
+id from the list it was handed, so swapping it for a GUI or an agent means
+replacing one function.
 
 ### Configuring a run — `config.json`
 
@@ -200,8 +297,8 @@ policy ordering inverting at 3–4 heroes.
 ## Training against it
 
 `CombatEnv` gives you `reset(seed=None)`, `step(action)`,
-`legal_action_mask()`, `action_space_size()` (<!--action_space-->181<!--/-->),
-`observation_space_size()` (<!--obs_size-->817<!--/-->), `OBS_OFFSETS` for slicing the
+`legal_action_mask()`, `action_space_size()` (<!--action_space-->161<!--/-->),
+`observation_space_size()` (<!--obs_size-->588<!--/-->), `OBS_OFFSETS` for slicing the
 observation, and `hand_card_ids()` if you want your own card embedding.
 
 ### Which class to use
@@ -281,13 +378,31 @@ Two things worth knowing:
 
 ### Action space
 
-`cards | potions | end turn` — <!--action_space-->181<!--/--> ids.
+`cards at enemies | cards at players | end turn` —
+<!--action_space-->161<!--/--> ids.
 
 | range | meaning |
 |---|---|
-| `[0, 120)` | play hand slot *s* at target *t* (10 slots × 12 targets) |
-| `[120, 180)` | drink potion slot *s* at target *t* (5 slots × 12 targets) |
-| `180` | end turn |
+| `[0, 120)` | play hand slot *s* at **enemy** *t* (10 slots × 12 enemies) |
+| `[120, 160)` | play hand slot *s* at **player** *t* (10 slots × 4 players) |
+| `160` | end turn |
+
+**Potions are out of both the action space and the observation.** Cutting one
+without the other would leave an agent able to drink what it cannot see.
+
+**Enemies and players are separate axes.** They used to share one 12-wide
+target axis, so `slot×12 + 2` meant "enemy 2" when that slot held a Strike
+and "ally 2" when it held a heal — one id with two meanings, told apart only
+by a card that changes every turn. 40 ids buys that away.
+
+**Player-target index *t* is observation player row *t*** — self at 0,
+teammates at 1–3, the same egocentric order the observation uses. `ALLY`
+("another player") never offers row 0; `SELF_OR_ALLY` does.
+
+Cards with no target to choose — `SELF`, `ALL_ENEMIES` — stay on the enemy
+axis at index 0 as a placeholder, because an axis whose purpose is expressing
+a choice is the wrong home for a card that has none. What the agent needs
+there is *which* mode the card is, and that arrives as a hand feature.
 
 **`legal_action_mask()` is trustworthy: masked-legal means the engine will
 accept it.** That is asserted, not assumed — `test_env.py` sweeps all pool
@@ -296,7 +411,7 @@ the illegal-action penalty never fires.
 
 ### Observation layout
 
-<!--obs_size-->817<!--/--> float32s. Slice with `env.OBS_OFFSETS` rather than recomputing the
+<!--obs_size-->588<!--/--> float32s. Slice with `env.OBS_OFFSETS` rather than recomputing the
 arithmetic — when this section last grew, every hand-rolled offset in the
 test suite broke at once.
 
@@ -304,10 +419,27 @@ test suite broke at once.
 |---|---|---|
 | players | 0–80 | (HP, block, energy + 17 status channels) × 4 |
 | enemies | 80–320 | (HP, intent, block + 17 status channels) × 12 |
-| relics | 320–403 | multi-hot over <!--relics-->83<!--/--> relics |
-| potions | 403–663 | per-slot one-hot, 5 slots × <!--potions-->52<!--/--> potions |
-| piles | 663–667 | hand / draw / discard / exhaust counts |
-| hand | 667–817 | 15 features × <!--hand_limit-->10<!--/--> slots |
+| piles | 320–352 | 4 piles × 8: count, 5 card-type counts, total damage, total block |
+| hand | 352–552 | 20 features × <!--hand_limit-->10<!--/--> slots |
+| ally_summary | 552–588 | 3 teammates × 12 capability counts (`observe.py`) |
+
+**Teammates are capability counts, not raw hands.** The action space indexes
+your *own* hand slots and never a teammate's, so slot structure there was
+pure cost — 600 floats became 36. Per teammate: how many playable cards give
+damage, block, draw, Strength, Energy, Vulnerable, Weak, or target an ally,
+plus `other`, `dead` (held Status/Curse clutter) and the playable damage and
+block totals. `other` and `dead` exist so no card is invisible — every one of
+the 212 pool cards maps to at least one capability, and a test asserts it.
+
+Counts are of what a teammate can **play**, not hold: the hand discards
+wholesale at end of turn, so a card they cannot afford is gone rather than
+waiting. `dead` is the exception, because a clogged hand is exactly where
+holding matters.
+
+**Piles carry composition, not just size.** A bare count cannot answer "how
+many Defends are left" or "is there enough damage in the deck to finish
+this"; type counts and damage/block totals can. Relics and potions were
+removed outright — 343 floats that are always zero under a `no_items` config.
 
 Design choices behind that shape:
 
@@ -315,9 +447,18 @@ Design choices behind that shape:
   <!--card_ids-->226<!--/--> printings would be 2260 floats teaching nothing transferable between
   Strike and Ultimate Strike. Per slot: `occupied`, `playable`, `cost`,
   `is_x_cost`, five card-type bits, `damage`, `block`, `exhausts`, `retain`,
-  `ethereal`, `upgraded`. Anything wanting true identity calls
-  `hand_card_ids()` and owns an embedding table — ids are nominal, so they
-  are deliberately *not* folded in as scaled floats.
+  `ethereal`, `upgraded`, and five targeting bits. Anything wanting true
+  identity calls `hand_card_ids()` and owns an embedding table — ids are
+  nominal, so they are deliberately *not* folded in as scaled floats.
+
+- **The targeting bits are load-bearing, not decoration.** The action space
+  asks for a target index per slot, and card *type* does not say what that
+  index means — an Attack takes an enemy, a Skill might take an enemy, an
+  ally, or nobody. Without `targets_enemy` / `targets_all_enemies` /
+  `targets_self` / `targets_ally` / `targets_self_or_ally` the network had to
+  infer targeting from `damage` and `block`, and its only other signal was
+  the mask zeroing its illegal choices *after* the fact — correction rather
+  than information.
 - **Potions are the opposite choice, on purpose.** A potion is an opaque
   effect callable with no comparable structure, so identity is all there is
   to encode. Per-slot, because the action space indexes slots.
@@ -471,7 +612,7 @@ smoke_all        PASS    0.6s
 21/21 passed in 9.0s
 ```
 
-<!--test_suites-->21<!--/--> suites, several hundred assertions, ~5 seconds. `python game_engine/tests/run_all.py
+<!--test_suites-->22<!--/--> suites, several hundred assertions, ~5 seconds. `python game_engine/tests/run_all.py
 env choice` filters by name; `-v` streams each suite's output; it exits
 non-zero with the failing `[FAIL]` lines, so it works as a commit gate.
 

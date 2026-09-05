@@ -1,21 +1,5 @@
 # -*- coding: utf-8 -*-
-"""The three things a real training loop needs that nothing else covers.
-
-Found by probing the env the way a trainer drives it, rather than the way the
-feature tests drive it:
-
-  1. TERMINAL STATE WAS FARMABLE. Stepping a finished episode fell through and
-     re-awarded the +10/-10 terminal bonus every time, so a rollout loop that
-     ignored `done` collected unbounded reward from a won fight. Nothing
-     crashed, which is what made it dangerous.
-  2. NO TRUNCATION. An unbounded episode does not fail loudly -- it hangs the
-     rollout collecting it. No non-terminating fight could actually be
-     constructed (enemies gain Strength and eventually out-scale any fixed
-     block), but "probably terminates" is not a bound.
-  3. OLD GYM API. reset() -> obs and step() -> 4-tuple. Gymnasium and SB3
-     need reset() -> (obs, info) and a 5-tuple with terminated/truncated
-     separated.
-"""
+"""The three things a real training loop needs that nothing else covers."""
 import os
 import sys
 
@@ -71,8 +55,6 @@ check("the winning step itself still paid out",
 
 print()
 print("2. truncation bounds the pathological case")
-# max_turns is in TURNS. Set it to 1 so it fires on a fight that would
-# otherwise run ~14 -- the cap itself is 200 in normal use.
 e = ENV.CombatEnv(mk, foe, seed=3, max_turns=1)
 e.reset()
 info = run_to_end(e)
@@ -81,8 +63,6 @@ check("...flagged as truncated", info.get("truncated"), True)
 check("...and the fight was NOT actually over",
       e.engine.is_over, False)
 
-# Truncation must not pay the terminal bonus: the fight was cut short, it was
-# neither won nor lost.
 e2 = ENV.CombatEnv(mk, foe, seed=3, max_turns=1)
 e2.reset()
 rewards = []
@@ -95,7 +75,6 @@ while not done and g < 200:
 check("no +/-10 terminal bonus on truncation",
       any(abs(r) >= 9.0 for r in rewards), False)
 
-# The default must be generous enough never to fire in real play.
 e3 = ENV.CombatEnv(mk, foe, seed=3)
 check("default cap is 200 turns", e3.max_turns, 200)
 e3.reset()
@@ -131,7 +110,6 @@ check("close() is callable", g.close(), None)
 check("delegates unknown attrs to CombatEnv",
       g.observation_space_size(), ENV.OBS_SIZE)
 
-# terminated and truncated must be mutually exclusive, and separated.
 g2 = ENV.GymnasiumEnv(mk, foe, seed=3)
 g2.reset()
 term = trunc = False

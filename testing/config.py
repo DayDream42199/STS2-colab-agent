@@ -1,32 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Load and validate config.json -- the setup play.py reads instead of
-hardcoding a party, a deck and a content set.
-
-WHY A FILE RATHER THAN PROMPTS. play.py used to hardcode "Ironclad, 80 hp,
-starter deck, Burning Blood" and ask two questions at startup. Changing the
-restrictions meant editing Python. A JSON file means a UI (or an agent
-driving one) can write the setup and launch the game without touching code,
-which is the whole point.
-
-WHAT IS AND IS NOT SWITCHABLE -- worth being straight about:
-
-  relics / potions / rewards    real toggles. Nothing grants them, so they
-                                genuinely do not appear.
-  cards.allow / cards.deny      real filter. Applies to BOTH the starting
-                                deck and the reward pools, so a denied card
-                                cannot sneak in from a reward screen.
-  statuses                      NOT a toggle, and there is no honest way to
-                                make one. Vulnerable, Weak and the rest come
-                                from enemy moves and card effects; switching
-                                them off would mean rewriting the content.
-                                Restrict `encounter` instead -- pick a simple
-                                enemy and you will not see them. The "basic"
-                                preset does exactly that.
-
-Missing file, missing keys and unknown keys are all handled rather than
-crashing: a UI writing a partial config gets sensible defaults and a clear
-error for anything genuinely wrong.
-"""
+"""Load and validate config.json -- the setup play.py reads instead of hardcoding a party, a deck..."""
 
 import io
 import json
@@ -36,8 +9,6 @@ DEFAULT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
 
-# The full game, exactly as play.py behaved before configs existed. Every
-# other config is this dict with pieces overridden.
 DEFAULTS = {
     "preset": None,
     "party": [
@@ -52,18 +23,13 @@ DEFAULTS = {
         "potion_rewards": True,
     },
     "cards": {
-        "allow": None,      # None = every card; else a list of exact names
+        "allow": None,
         "deny": [],
     },
-    "mode": "ask",          # "ask" | "gauntlet" | "single"
-    "encounter": None,      # key into play.ENCOUNTERS; None = ask
+    "mode": "ask",
+    "encounter": None,
     "seed": None,
 
-    # simple.py's cut-down game. Separate from the keys above because it does
-    # not use the encounter table or the card pools at all -- it has one
-    # hand-built dummy and a Strike/Defend deck. `players` here is the party
-    # SIZE; simple.py's heroes are identical by design, so there is nothing
-    # per-member to configure the way `party` does for the full game.
     "simple": {
         "players": 1,
         "player_hp": 30,
@@ -71,17 +37,13 @@ DEFAULTS = {
         "enemy_hp": 75,
         "enemy_damage": 11,
         "max_turns": 50,
-        # null = "scale the enemy when there is more than one hero", which is
-        # what stops co-op being a walkover. true/false forces it.
         "scale_enemy": None,
     },
 }
 
 
-# Named starting points. A UI can offer these as a dropdown and then let the
-# user override individual fields.
 PRESETS = {
-    "full": {},                                   # DEFAULTS unchanged
+    "full": {},
     "basic": {
         "party": [{"name": "Ironclad", "hp": 30, "energy": 3,
                    "deck": "strike_defend", "starting_relic": None}],
@@ -91,7 +53,7 @@ PRESETS = {
         "mode": "single",
         "encounter": "1",
     },
-    "coop": {                                     # 3 heroes, full game
+    "coop": {
         "party": [
             {"name": "Ironclad", "hp": 80, "energy": 3, "deck": "starter",
              "starting_relic": "Burning Blood"},
@@ -102,7 +64,7 @@ PRESETS = {
         ],
         "simple": {"players": 3},
     },
-    "no_items": {                                 # full cards, no relics/potions
+    "no_items": {
         "content": {"relics": False, "potions": False, "card_rewards": True,
                     "relic_rewards": False, "potion_rewards": False},
     },
@@ -128,10 +90,7 @@ def _merge(base, override):
 
 
 def load(path=None, quiet=False):
-    """Read a config, apply its preset, fill in defaults, validate.
-
-    A missing file is NOT an error -- it means "the full game", which is what
-    play.py did before this existed."""
+    """Read a config, apply its preset, fill in defaults, validate."""
     path = path or DEFAULT_PATH
     if not os.path.exists(path):
         if not quiet:
@@ -156,8 +115,6 @@ def load(path=None, quiet=False):
     else:
         cfg = dict(DEFAULTS)
 
-    # Explicit keys win over the preset, so a UI can say
-    # {"preset": "basic", "party": [{"hp": 60}]} and get basic-but-tougher.
     cfg = _merge(cfg, raw)
     validate(cfg)
     return cfg
@@ -236,23 +193,14 @@ def validate(cfg):
 
 
 def simple_kwargs(cfg):
-    """The `simple` section as keyword arguments for battle() /
-    SimpleEnv() / play_interactive(), which all take the same names.
-
-    Returned as a dict rather than applied here so simple.py stays usable
-    without a config file at all -- `battle(greedy)` still works."""
+    """The `simple` section as keyword arguments for battle() / SimpleEnv() / play_interactive(), which..."""
     s = dict(DEFAULTS["simple"])
     s.update(cfg.get("simple", {}))
     return s
 
 
-# --- turning a config into game objects ------------------------------------
-
 def card_filter(cfg):
-    """A predicate over card NAMES, honouring allow and deny.
-
-    Returned as a function rather than a set so callers can apply it to a
-    deck, a reward pool, or a single card without three code paths."""
+    """A predicate over card NAMES, honouring allow and deny."""
     allow = cfg["cards"].get("allow")
     deny = set(cfg["cards"].get("deny") or ())
 
@@ -265,10 +213,7 @@ def card_filter(cfg):
 
 
 def build_deck(spec, permitted):
-    """Turn a deck spec into real Cards, then apply the card filter.
-
-    `spec` is "starter", "coop_support", "strike_defend", or a list of names
-    like ["Strike", "Strike", "Defend"] for an exact deck."""
+    """Turn a deck spec into real Cards, then apply the card filter."""
     from game_engine.cards import (make_starter_deck, make_coop_support_deck,
                                    CARD_POOL_IRONCLAD, ANCIENT_CARDS_IRONCLAD,
                                    COLORLESS_POOL, ANCIENT_COLORLESS)
@@ -279,8 +224,6 @@ def build_deck(spec, permitted):
     elif spec == "strike_defend":
         deck = [c for c in make_starter_deck() if c.name in ("Strike", "Defend")]
     else:
-        # An explicit list of names. Built from every pool so a config can
-        # name any real card, not just starter ones.
         by_name = {}
         for c in make_starter_deck() + make_coop_support_deck():
             by_name.setdefault(c.name, lambda c=c: c.clone())
@@ -329,8 +272,7 @@ def build_party(cfg):
 
 
 def describe(cfg):
-    """One short block shown at startup, so what is switched off is visible
-    rather than something the player has to infer from its absence."""
+    """One short block shown at startup, so what is switched off is visible rather than something the..."""
     lines = []
     preset = cfg.get("preset")
     lines.append("Setup: {}".format(preset if preset else "custom"))

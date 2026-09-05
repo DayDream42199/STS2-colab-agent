@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Verification for task #28: all 22 newly-ported potions and the engine
-features they needed."""
+"""Verification for task #28: all 22 newly-ported potions and the engine features they needed."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
@@ -231,7 +227,7 @@ check("Foul Potion hits enemies AND the user", (ehp0 - e.hp, hp0 - p.hp), (12, 1
 eng, p, e = setup()
 use(eng, p, "Glowwater Potion")
 check("Glowwater Potion exhausts the hand", len(p.exhaust_pile), 5)
-check("...and draws 10", len(p.hand), 5)   # starter deck only has 5 left
+check("...and draws 10", len(p.hand), 5)
 
 eng, p, e = setup()
 p.energy = 3
@@ -252,7 +248,6 @@ print("=" * 74)
 check("48 pool + 4 special = the wiki's 52 in-scope potions",
       len(P.POTION_POOL_IRONCLAD) + len(P.SPECIAL_POTIONS), 52)
 
-# Every potion must at least run without raising.
 failed = []
 for pot in list(P.POTION_POOL_IRONCLAD) + list(P.SPECIAL_POTIONS):
     eng, p, e = setup()

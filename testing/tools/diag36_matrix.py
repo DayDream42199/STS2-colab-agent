@@ -1,16 +1,5 @@
 # -*- coding: utf-8 -*-
-"""#36 diagnostic 1: deck ablation matrix.
-
-Runs EVERY encounter against all three deck tiers, not just the one its
-region is assigned. Three questions at once:
-
-  * Are Act 1/2 normals still ~100% on a bare starter deck? If yes,
-    DECK_TIERS is not what makes them walkovers.
-  * Do the 0% Act 1 elites/bosses become winnable with a bigger deck? If
-    yes they are not mis-ported -- they are being measured with a deck no
-    real player would still have when they reach them.
-  * Does win rate move at all for the saturated groups, or is it pinned?
-"""
+"""#36 diagnostic 1: deck ablation matrix."""
 import sys, io, contextlib
 import os
 import sys
@@ -28,8 +17,6 @@ def measure(make_enemies, tier):
     res = [bench.run_encounter(make_enemies, s, tier) for s in range(SEEDS)]
     wins = [r for r in res if r[0]]
     wr = 100.0 * len(wins) / len(res)
-    # HP lost is measured on WINS only; a loss is always "80 lost" and would
-    # drag the average toward the win rate instead of adding information.
     hp_lost = mean(80 - r[3] for r in wins) if wins else float("nan")
     return wr, hp_lost
 

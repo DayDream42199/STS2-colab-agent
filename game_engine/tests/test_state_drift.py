@@ -1,31 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Player state must not leak between combats.
-
-WHAT THIS GUARDS. Player.__init__ declares ~55 fields and start_combat()
-re-initialises almost all of them. Those are two hand-maintained lists of the
-same thing, so adding a field to one and forgetting the other is a single-line
-mistake with no symptom in a unit test: the field simply keeps its value from
-the previous fight. In a gauntlet run that means Corruption still active in
-fight 4, or a Nostalgia flag surviving the boss that granted it.
-
-It is not hypothetical. Two real instances found when this was written:
-
-  * `rebound_next_card` existed ONLY after start_combat(). A Player that had
-    not yet entered a fight did not have the attribute at all, which is why
-    combat.py had to read it through getattr() rather than plainly. Fixed;
-    section 3 keeps it fixed.
-  * `cards_played_this_turn` / `skills_played_this_turn` are set in __init__
-    and NOT reset by start_combat(). Harmless today only because start_turn()
-    always runs before a card can be played -- so section 2 pins that down
-    rather than waving it through.
-
-WHY IT IS WRITTEN THIS WAY. The check is derived from vars(player) rather than
-from a list of field names. A hand-written list of "fields that should reset"
-would be a third copy of the same inventory, and would drift exactly like the
-two it is supposed to police. The only thing spelled out by hand is the
-allowlist of state that SHOULD survive a combat -- and section 4 checks that
-list for stale entries.
-"""
+"""Player state must not leak between combats."""
 import os
 import sys
 
@@ -48,20 +22,16 @@ def check(label, got, want):
         FAILS.append(label)
 
 
-# Run state: deliberately survives a combat, so a fresh fight must NOT reset it.
 PERSISTS_ACROSS_COMBATS = {
-    "name", "max_hp", "max_energy",   # identity / configuration
-    "deck_template",                  # the run's deck, incl. reward picks
-    "relics", "relic_counters",       # whole-run relic state
-    "potions", "potion_slots",        # the belt carries between fights
-    "rng",                            # reseeded in place, never replaced
-    "engine",                         # set by CombatEngine AFTER start_combat
-    "draw_pile",                      # rebuilt from deck_template, so != []
+    "name", "max_hp", "max_energy",
+    "deck_template",
+    "relics", "relic_counters",
+    "potions", "potion_slots",
+    "rng",
+    "engine",
+    "draw_pile",
 }
 
-# Turn state: not reset by start_combat(), but start_turn() always runs before
-# a card can be played. Allowlisted here ONLY because section 2 proves the
-# turn boundary really does reset them -- nothing is waved through untested.
 RESET_BY_START_TURN = {
     "energy", "cards_played_this_turn", "skills_played_this_turn",
 }
@@ -84,11 +54,6 @@ def snapshot(p):
     return out
 
 
-# Three fields hold structured entries that start_combat() UNPACKS as it
-# clears them (clear_temp_costs reads `card, scope`; the other two call
-# methods on the card). A generic ["POISON"] marker makes those crash on the
-# unpack rather than testing anything, so they get realistic contents --
-# which is a better test anyway: it is exactly what they hold mid-fight.
 def _structured_poison():
     from game_engine.cards import make_starter_deck as _deck
     card = _deck()[0]
@@ -123,7 +88,7 @@ def poison(p, skip):
         elif isinstance(v, dict):
             new = {"POISON": 1}
         else:
-            continue          # objects (rng) -- nothing meaningful to poison
+            continue
         setattr(p, k, new)
         changed.append(k)
     return changed
@@ -175,8 +140,6 @@ check("the two allowlists do not overlap",
 
 print()
 print("5. a real fight leaves nothing behind for the next one")
-# The end-to-end version of section 1: rather than poisoning fields by hand,
-# play an actual combat and let the engine dirty whatever it dirties.
 p4 = fresh_player()
 clean = snapshot(p4)
 eng = CombatEngine([p4], [E.make_nibbit()], seed=2)
@@ -197,7 +160,6 @@ p4.start_combat(seed=3)
 p4.start_turn()
 dirty = snapshot(p4)
 skip = PERSISTS_ACROSS_COMBATS | {
-    # start_turn() legitimately moves these: it draws the opening hand.
     "hand", "discard_pile", "cards_drawn_this_turn", "cards_drawn_this_combat",
     "exhaust_pile", "energy",
 }

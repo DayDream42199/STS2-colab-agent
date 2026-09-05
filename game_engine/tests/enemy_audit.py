@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Completeness audit: every enemy named in the wiki's region/Elites/Bosses
-data modules, diffed against what the replica actually builds."""
+"""Completeness audit: every enemy named in the wiki's region/Elites/Bosses data modules, diffed..."""
 import os
 import sys
 
-# The modules under test live one directory up. This used to be a hardcoded
-# absolute path, which is why the whole suite only ran on one machine from
-# one directory -- and why it lived in a temp folder rather than the repo.
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 import game_engine.enemies as E

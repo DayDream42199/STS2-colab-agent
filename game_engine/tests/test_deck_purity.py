@@ -1,27 +1,5 @@
 # -*- coding: utf-8 -*-
-"""No card may permanently mutate the deck it came from.
-
-THE TRAP. Player.start_combat() rebuilds the draw pile with
-`list(self.deck_template)` -- a copy of the LIST, not of the Card objects. So
-a card in hand IS the object living in deck_template. `card.upgrade()` on it
-therefore upgrades that card for the whole RUN, not the fight.
-
-This is the worst failure shape in the codebase: silent, and it compounds.
-A card that permanently upgrades itself makes every later fight easier, and
-nothing crashes -- you would see it as an agent's win rate drifting upward
-over long runs and go looking in the trainer.
-
-It is not hypothetical. Armaments shipped with exactly this bug (two plays
-across two fights permanently upgraded the deck for free), which is why
-Player.upgrade_for_combat() / set_temp_cost(scope=) / grant_replay() exist:
-they record the mutation and revert it at combat end.
-
-WHAT THIS ADDS. Those helpers are a convention, and until now nothing
-enforced it -- a new effect calling `card.upgrade()` directly slipped
-through, and test_potions.py only spot-checked two potions. This plays every
-card in every pool through a real combat, ends it, starts a second, and
-asserts every Card in deck_template came out byte-identical.
-"""
+"""No card may permanently mutate the deck it came from."""
 import os
 import sys
 
@@ -44,14 +22,10 @@ def check(label, got, want):
 
 
 def fingerprint(card):
-    """Every per-instance field a combat effect could plausibly write.
-
-    Compared as a whole rather than field by field so a mutation to something
-    nobody thought of still shows up."""
+    """Every per-instance field a combat effect could plausibly write."""
     return (
         card.name,
-        card.cost,                  # potions/relics set this on DISPOSABLE
-                                    # copies only; a deck card must never move
+        card.cost,
         card.upgraded,
         card.temp_cost,
         card.replay,
@@ -74,15 +48,7 @@ def bag(hp=100000):
 
 
 def exercise(factory, seed=0, turns=6, allies=0):
-    """Put 3 copies of a card in a deck, fight, end, start again.
-
-    `allies` adds teammates, because an ALLY-targeting card is refused
-    outright when there is nobody to target -- so a solo harness silently
-    never resolves Blaze, Lift, Coordinate, Believe in You or Demonic
-    Shield, and would report them clean without testing them.
-
-    Returns (before, after, plays) -- the deck fingerprints either side of a
-    whole combat, and how many times the card under test actually resolved."""
+    """Put 3 copies of a card in a deck, fight, end, start again."""
     deck = [factory() for _ in range(3)] + C.make_starter_deck()
     p = Player("P", 400, 99, deck=deck)
     party = [p] + [Player("Ally%d" % i, 400, 99, deck=C.make_starter_deck())
@@ -98,8 +64,6 @@ def exercise(factory, seed=0, turns=6, allies=0):
     for _ in range(turns):
         if eng.is_over:
             break
-        # Play whatever is legal, newest-first, bounded so a card that draws
-        # or generates cards cannot spin.
         for _ in range(30):
             playable = eng.playable_cards(p)
             if not playable:
@@ -118,13 +82,10 @@ def exercise(factory, seed=0, turns=6, allies=0):
         if not eng.is_over:
             eng.start_player_turn()
 
-    # End the fight in VICTORY -- that is the path that fires the combat-end
-    # revert in _check_victory_defeat.
     enemy.hp = 0
     enemy.alive = False
     eng._check_victory_defeat()
 
-    # And a second combat, which is where start_combat's own reset runs.
     eng2 = CombatEngine(party, [bag()], seed=seed + 1, scale_enemies=False)
     eng2.start_player_turn()
 
@@ -154,11 +115,10 @@ for label, pool in POOLS:
     unplayed = 0
     for factory in pool:
         total += 1
-        # An ALLY card needs a teammate or the engine refuses it outright.
         allies = 1 if factory().target == C.TargetMode.ALLY else 0
         try:
             before, after, plays = exercise(factory, allies=allies)
-        except Exception as exc:                     # a crash is also a finding
+        except Exception as exc:
             errors.append((factory().name, repr(exc)))
             continue
         if len(before) != len(after):
@@ -195,8 +155,6 @@ check("cards swept", total > 200, True)
 check("cards that permanently mutated deck_template", mutated, [])
 check("cards that raised", errors, [])
 
-# Coverage honesty: an unplayable Status/Curse never resolves, which is
-# correct -- but if a PLAYABLE card never fired, this test did not test it.
 unplayable_names = {c.name for c in
                     [f() for f in C.CURSE_POOL] + [mk() for mk in C.STATUS_CARDS]
                     if c.is_unplayable()}

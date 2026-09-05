@@ -1,61 +1,4 @@
-"""
-bench.py -- combat difficulty measurement.
-
-Part A measures COMBAT: every encounter run independently, no rewards, no
-carry-over. That is the number to trust, and it is the default output.
-Each fight is measured twice -- once on a fixed starter deck (one yardstick
-for everything, so it shows how the CONTENT scales) and once on a deck
-sized to where the fight sits in a run (what a player EXPERIENCES).
-
-Part B measures the 6-fight gauntlet, which is a different thing and a
-weaker one. It bundles reward luck into the result: adding two items to
-the reward pools once moved its clear rate from 6/40 to 9/40 purely by
-reshuffling later draws, and three values recorded across sessions (18%,
-15%, 22%) were one result inside the noise. Reward pacing is also this
-replica's own invention rather than the game's. So Part B is opt-in and
-its number should never be quoted as a balance finding.
-
-Run: python bench.py                 (Part A, default seeds)
-     python bench.py 100             (more seeds = tighter, slower)
-     python bench.py 40 --gauntlet   (also run the noisy Part B)
-
-WHY THIS EXISTS
----------------
-The first attempt at this measured only "did the whole gauntlet get
-cleared", with a policy that skipped every card reward and picked cards by
-cheapest cost. That policy loses to almost everything, so it returned
-0/15 both before AND after a change that provably altered enemy behaviour
--- a floor effect that made the benchmark blind. Two lessons are baked in
-here: measure PER-ENCOUNTER (so one brutal fight can't mask everything
-behind it), and use a policy good enough that results aren't pinned to the
-floor.
-
-WHAT THE NUMBERS ARE AND AREN'T
--------------------------------
-`greedy_policy` below is a scripted heuristic, not a good player. It never
-plans ahead, never builds toward a deck archetype, and evaluates cards by
-string-matching their description text. So treat output as a RELATIVE
-signal -- "Vantom kills 90% of runs while Byrdonis kills 10%" is a real
-finding; "encounter X has a 60% win rate therefore it is fairly tuned" is
-not. Its other job is regression detection: re-run after any balance-
-touching change and look for numbers that move when they shouldn't.
-
-It cannot beat Act 2/3 bosses, and that is expected rather than a data
-problem: every fight that sat near 0% on the top rung was re-checked with
-an absurd loadout (250 HP, 6 energy, 40 upgraded cards, 11 relics) and all
-13 became winnable, 12 of them at 100%. Nothing is ported unwinnable.
-
-TWO STATISTICS TRAPS THIS HARNESS HAS ALREADY FALLEN INTO (task #36)
---------------------------------------------------------------------
-1. MEDIAN over a bimodal group. Normals in a region split into trivial and
-   real fights, so the median reports whichever cluster is bigger and reads
-   flat while the mean descends. A "flat difficulty curve" was chased as a
-   balance bug for a whole session; it was this. Group blocks now print
-   mean AND median -- when they disagree, look at the distribution.
-2. A SATURATED metric. Every Act 1 Overgrowth normal wins 40/40, so win
-   rate cannot tell a Twig Slime from a Mawler. Average HP lost can (0 vs
-   29) and stays informative where win rate is pinned at the ceiling.
-"""
+"""bench.py -- combat difficulty measurement."""
 
 import os as _os
 import sys as _sys
@@ -75,20 +18,12 @@ from game_engine.combat import CombatEngine
 from game_engine.relics import BURNING_BLOOD, RELIC_POOL_IRONCLAD
 from game_engine.statuses import StatusType
 import testing.play as play
-MAX_TURNS = 60          # safety cap; a fight hitting this is itself a finding
+MAX_TURNS = 60
 DEFAULT_SEEDS = 40
 
 
-# ---------------------------------------------------------------------------
-# Policy
-# ---------------------------------------------------------------------------
-
 def _applies_vulnerable(card) -> bool:
-    """String-matched on purpose: Card has no structured 'what statuses do
-    I apply' data, and adding one just for the benchmark would put test-only
-    fields on a core model. Requires BOTH 'apply' and 'vulnerable' so cards
-    that merely READ Vulnerable (Bully "for each Vulnerable on the enemy",
-    Molten Fist "double the enemy's Vulnerable") don't match."""
+    """String-matched on purpose: Card has no structured 'what statuses do I apply' data, and adding..."""
     desc = card.current_description().lower()
     return "apply" in desc and "vulnerable" in desc
 
@@ -98,11 +33,7 @@ def _grants_block(card) -> bool:
 
 
 def _incoming_damage(engine) -> int:
-    """Rough estimate of damage aimed at the player next enemy phase.
-    Move.damage is BASE PER-HIT damage, so multi-hit moves (Peck = 3 damage
-    x3) under-report badly. Deliberately kept rough -- it only has to be
-    good enough to decide 'block or attack', and a smarter estimate would
-    mean teaching the benchmark every move's hit count."""
+    """Rough estimate of damage aimed at the player next enemy phase."""
     total = 0
     for e in engine.enemies_alive():
         mv = e.current_move
@@ -112,16 +43,7 @@ def _incoming_damage(engine) -> int:
 
 
 def greedy_policy(engine, player):
-    """Pick one card to play, or None to end the turn.
-
-    Priority, in order:
-      1. Powers -- they compound, so earlier is strictly better
-      2. Apply Vulnerable if the focus target lacks it (this is the whole
-         reason the old cheapest-first policy was so weak: it never set up
-         the 1.5x multiplier before spending damage into it)
-      3. Block, but only when actually threatened
-      4. Biggest attack available
-    """
+    """Pick one card to play, or None to end the turn."""
     alive = engine.enemies_alive()
     if not alive:
         return None, None
@@ -156,64 +78,29 @@ def greedy_policy(engine, player):
 
 
 def _card_value(card) -> float:
-    """A crude "how much do I want this card" score, in damage-equivalent
-    units. Same spirit as greedy_policy: good enough to rank, not a model."""
+    """A crude "how much do I want this card" score, in damage-equivalent units."""
     if card.card_type in (CardType.STATUS, CardType.CURSE):
-        return -100.0            # always the first thing to throw away
+        return -100.0
     v = float(card.val("damage") + card.val("block"))
     if card.card_type == CardType.POWER:
-        v += 12.0                # powers compound, so they beat a one-shot
+        v += 12.0
     if card.upgraded:
         v += 2.0
     return v
 
 
-# Prompts that ADD a card to your side: tutors (Wish, Seeker Strike,
-# Discovery, Abundance, Neow's Fury, Stratagem), Dual Wield's copy, and
-# Headbutt recovering from the discard pile. These are the only prompts
-# where being greedy measurably helps -- see greedy_choice.
 GAIN_PROMPTS = {"to_hand", "copy", "to_draw_top"}
 
 
 def greedy_choice(engine, player, options, prompt, kind):
-    """Answer CombatEngine.request_choice for the benchmark.
-
-    Greedy ONLY on gain prompts; everything else defers to random. That is
-    an empirical result, not a preference. Measured over 1920 runs per arm
-    (160 seeds x 12 non-saturated encounters, decks built around the choice
-    cards):
-
-        random, i.e. no resolver          50.21%
-        greedy on GAIN prompts only       52.45%   (+2.24)
-        greedy on EVERY prompt            49.48%   (-0.73)
-
-    Being greedy everywhere is WORSE THAN RANDOM. The gain from tutoring
-    well is real, and the shed-side prompts (exhaust / transform / stash)
-    plus `upgrade` more than cancel it.
-
-    Two caveats worth keeping straight:
-
-    * This is tuned to THIS BENCHMARK'S POLICY, not to correct play. A
-      human would obviously upgrade their biggest card, but greedy `upgrade`
-      measured slightly negative here because greedy_policy cannot exploit
-      it. play.py asks the human instead, which is the right answer there.
-    * The first version of this function was greedy everywhere and cost 4pp.
-      Chasing that down found a real bug rather than just a bad weight:
-      Headbutt and Thinking Ahead had both been filed under `to_draw_top`,
-      but Headbutt RECOVERS a card from the discard pile (you want the best)
-      while Thinking Ahead SHEDS one from your hand (you want the worst).
-      One kind, two opposite preferences, so a resolver had to be wrong for
-      one of them. Thinking Ahead is now `stash`."""
+    """Answer CombatEngine.request_choice for the benchmark."""
     if kind in GAIN_PROMPTS:
         return max(options, key=_card_value)
     return player.rng.choice(options)
 
 
 def maybe_use_potion(engine, player) -> bool:
-    """Spend a potion when it's likely to matter. Without this the gauntlet
-    bot happily collected potions and died holding them, which understated
-    how far a run can actually get. Fires when hurt, when the belt is full
-    (so rewards aren't wasted), or against a boss-sized HP pool."""
+    """Spend a potion when it's likely to matter."""
     if not player.potions:
         return False
     alive = engine.enemies_alive()
@@ -240,24 +127,9 @@ def take_player_turn(engine, player):
         target = focus if card.target == TargetMode.SINGLE_ENEMY else None
         ally = engine.other_player(player) if card.target == TargetMode.ALLY else None
         if not engine.play_card(player, card, target=target, ally_target=ally):
-            return   # refused play -> stop, never spin on it
+            return
 
 
-# ---------------------------------------------------------------------------
-# Part A -- per-encounter lethality, fixed starter deck
-# ---------------------------------------------------------------------------
-
-# How strong a deck the measurement gives the player, as a RUN-PROGRESS
-# ladder. These are INVENTED baselines -- the real game has no such table --
-# but measuring an Act 3 boss with a 10-card starter deck tells you nothing
-# about that boss, only that a starting deck is not an Act 3 deck. Kept
-# deliberately crude: extra pool cards, a share upgraded, and extra relics.
-#
-# Six rungs rather than three because deck growth does not step once per
-# act. Keying this on the act alone was an outright measurement bug (see
-# DECK_TIER_FOR): it fought Act 1 BOSSES with the Act 1 starter deck, which
-# reported all three as 0% unwinnable when they are simply never fought on
-# 10 cards. A player reaching them has ~8 fights of rewards behind them.
 DECK_TIERS = {
     1: dict(extra_cards=0,  upgrade_frac=0.00, relics=0, max_hp=80),
     2: dict(extra_cards=5,  upgrade_frac=0.15, relics=1, max_hp=80),
@@ -269,8 +141,7 @@ DECK_TIERS = {
 
 
 def build_deck_for_tier(tier: int, rng: random.Random):
-    """Starter deck plus `extra_cards` random pool cards, a fraction of the
-    whole upgraded. Uses the passed rng so a seed reproduces the deck."""
+    """Starter deck plus `extra_cards` random pool cards, a fraction of the whole upgraded."""
     spec = DECK_TIERS[tier]
     deck = make_starter_deck()
     for _ in range(spec["extra_cards"]):
@@ -282,11 +153,6 @@ def build_deck_for_tier(tier: int, rng: random.Random):
 
 
 def run_encounter(make_enemies, seed, tier: int = 1):
-    # Two seedings, because there are two independent streams: the global
-    # module (play.py's reward draws) and the content rng (the HP a factory
-    # rolls). Enemy HP used to come off the global module, so `random.seed`
-    # alone covered it; it now has its own stream and needs its own call, or
-    # every measured fight would face a differently-sized enemy.
     random.seed(seed)
     seed_content(seed)
     rng = random.Random(seed)
@@ -318,11 +184,6 @@ def run_encounter(make_enemies, seed, tier: int = 1):
     return won, timed_out, turns, max(0, p.hp)
 
 
-# Which rung of the ladder each encounter is measured on, by (region, tier).
-# Within an act you clear normals first, then an elite, then the boss, so
-# the deck is bigger at each step -- an Act 1 boss is an END-of-act-1 fight,
-# not a starting-deck fight. Rungs deliberately overlap across the act
-# boundary (an act 1 boss and an act 2 normal are minutes apart in a run).
 DECK_TIER_FOR = {
     ("Act 1  Overgrowth", "normal"): 1,
     ("Act 1  Overgrowth", "elite"):  2,
@@ -339,20 +200,13 @@ DECK_TIER_FOR = {
     ("Event-only", "normal"):        3,
 }
 
-# region_of/tier_of now live in play.py, next to the ENCOUNTERS table they
-# classify, so the interactive encounter menu can group by them too. The
-# dependency can only run this way round: bench imports play.
-from testing.play import region_of, tier_of, REGION_ORDER   # noqa: E402
+from testing.play import region_of, tier_of, REGION_ORDER
 
 ORDER = REGION_ORDER
 
 
 def _measure(make_enemies, seeds, tier):
-    """(win%, avg HP lost on wins, avg turns, timeouts) at one deck tier.
-
-    HP lost is averaged over WINS ONLY. Including losses would score every
-    death as "80 lost" and collapse the metric back into the win rate --
-    the exact redundancy it exists to avoid."""
+    """(win%, avg HP lost on wins, avg turns, timeouts) at one deck tier."""
     res = [run_encounter(make_enemies, s, tier) for s in range(seeds)]
     wins = [r for r in res if r[0]]
     hp_lost = mean(DECK_TIERS[tier]["max_hp"] - r[3] for r in wins) if wins else None
@@ -447,14 +301,8 @@ def _group_stats(block):
               f"median {sorted(wr)[len(wr)//2]:>5.1f}%")
 
 
-# ---------------------------------------------------------------------------
-# Part B -- gauntlet curve: how far does a run get, and where does it die?
-# ---------------------------------------------------------------------------
-
 def run_gauntlet_once(seed):
-    """Drives the real play.run_gauntlet so the measured curve is the one
-    players actually get (rewards, HP carry-over, revives included) rather
-    than a reimplementation that could drift from it."""
+    """Drives the real play.run_gauntlet so the measured curve is the one players actually get..."""
     random.seed(seed)
     seed_content(seed)
     p = Player("Ironclad", max_hp=80, max_energy=3, deck=make_starter_deck())
@@ -475,10 +323,6 @@ def run_gauntlet_once(seed):
             return True, log_pos
         return False, log_pos
 
-    # Reward screens are the only thing still calling input(); "0" takes the
-    # first offer every time. BOUNDED on purpose -- an unbounded generator
-    # feeding a retry loop is exactly how an earlier stray test filled a disk
-    # with a 29GB log. Past the cap this raises instead of spinning.
     answers = itertools.chain(["0"] * 500,
                               iter(lambda: (_ for _ in ()).throw(
                                   RuntimeError("benchmark hit an unexpected input() prompt")), None))
@@ -504,9 +348,7 @@ def _patched(auto_choose, auto_act, answers):
 
 
 def part_b(seeds):
-    """OPT-IN. See the module docstring: this bundles reward luck into the
-    result and its clear rate has never been stable enough to read as a
-    balance signal."""
+    """OPT-IN."""
     print()
     print("=" * 78)
     print("GAUNTLET CURVE  (opt-in; measures reward luck as much as combat)")

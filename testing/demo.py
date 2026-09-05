@@ -13,8 +13,7 @@ from game_engine.env import CombatEnv
 
 
 def run_ironclad_pool_smoke_test():
-    """Play through every ported real Ironclad card once each against a
-    punching bag enemy, to catch any that error out or behave oddly."""
+    """Play through every ported real Ironclad card once each against a punching bag enemy, to catch..."""
     print("=" * 70)
     print("IRONCLAD CARD POOL SMOKE TEST (each real ported card, once)")
     print("=" * 70)
@@ -24,13 +23,13 @@ def run_ironclad_pool_smoke_test():
     enemies[0].max_hp = enemies[0].hp = 100000
     engine = CombatEngine([p1], enemies, seed=1)
     engine.start_player_turn()
-    p1.hand = list(p1.draw_pile)  # cheat: put the whole pool in hand at once
+    p1.hand = list(p1.draw_pile)
     p1.draw_pile = []
 
     for card in list(p1.hand):
         if card not in p1.hand or engine.is_over:
             continue
-        p1.energy = p1.max_energy  # test harness only: don't let one X-cost card starve the rest
+        p1.energy = p1.max_energy
         alive_enemies = engine.enemies_alive()
         target = alive_enemies[0] if alive_enemies else None
         ok = engine.play_card(p1, card, target=target)
@@ -64,8 +63,6 @@ def run_scripted_coop_demo():
         for player in (p1, p2):
             if not player.alive:
                 continue
-            # greedy policy: play cheapest-first playable card into the
-            # lowest-hp enemy until out of energy or hand
             progressed = True
             while progressed and not engine.is_over:
                 progressed = False

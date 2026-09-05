@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Does env.legal_action_mask agree with what CombatEngine will accept?
-
-The mask re-implements the affordability check instead of calling
-playable_cards(), so every gate added since it was written is invisible to
-it. This asks the mask which plays are legal, then actually attempts them.
-"""
+"""Does env.legal_action_mask agree with what CombatEngine will accept?"""
 import os
 import sys
 
@@ -22,7 +17,6 @@ def probe(label, hand_builder, energy=99):
     return e
 
 
-# Find the env class name.
 env_cls = None
 for name in dir(ENV):
     obj = getattr(ENV, name)
@@ -65,7 +59,6 @@ for label, card in trials:
     m, g = mask_says_legal(card), engine_accepts(card)
     print(f"{label:<40} {str(m):>6} {str(g):>8}  {'DRIFT' if m != g else ''}")
 
-# Sloth cap
 p.hand = [[mk() for mk in C.STATUS_CARDS if mk().name == "Sloth"][0]]
 strikes = [C.make_starter_deck()[0] for _ in range(4)]
 p.hand += strikes

@@ -1,21 +1,5 @@
 # -*- coding: utf-8 -*-
-"""The co-op observation is egocentric: slot 0 is always ME.
-
-WHAT THIS GUARDS. The observation used to list players by seat, so player
-slot 0 held P0's HP no matter who was acting. A single shared policy -- the
-normal way to train co-op -- therefore could not tell its own HP from a
-teammate's, and would learn to block based on whichever seat happened to be
-first.
-
-It was also internally inconsistent, which is the sharper bug: the relic,
-potion, pile and hand sections have ALWAYS described the acting player, so
-the vector showed one player's hand next to another player's HP.
-
-The fix rotates the player block so the actor is slot 0 and teammates follow
-in wrapped seat order. Ally target indices count over the same order, so ally
-action k names player slot k+1 -- checked here, because rotating the
-observation while leaving targeting in seat order would just move the bug.
-"""
+"""The co-op observation is egocentric: slot 0 is always ME."""
 import os
 import sys
 
@@ -67,7 +51,6 @@ def party(n, hps):
 
 
 print("1. slot 0 is the ACTING player, not seat 0")
-# Distinct HP per player, so a slot's occupant is unambiguous.
 HPS = [40, 60, 80, 100]
 e = ENV.CombatEnv(party(4, HPS), lambda: [bag()], seed=1)
 e.reset()
@@ -102,7 +85,6 @@ for seat in (0, 1):
 
 print()
 print("4. ally action k names player slot k+1")
-# Give every player an ally-targeting card so the mask has ALLY entries.
 def blaze_party():
     out = []
     for i in range(3):
@@ -127,12 +109,10 @@ for seat in range(3):
     e3.active_player_idx = seat
     obs = e3._observe()
     allies = e3._allies_in_obs_order()
-    # Every ally index must match the player the observation puts at k+1.
     aligned = all(
         hp_at(obs, k + 1) == round(allies[k].hp / allies[k].max_hp, 4)
         for k in range(len(allies)))
     check(f"P{seat} acting -> ally k lines up with slot k+1", aligned, True)
-    # And _ally_at must resolve to that same player.
     check(f"P{seat} acting -> _ally_at(0) is the slot-1 player",
           e3._ally_at(0) is allies[0], True)
 
@@ -148,7 +128,6 @@ check("the downed ally still occupies slot 1 (mapping does not shift)",
 check("_ally_at(0) falls through to a LIVING ally",
       e3._ally_at(0) is allies[1], True)
 
-# The mask must not offer the dead one.
 me = e3._current_player()
 lift = None
 for c in me.draw_pile + me.hand:
@@ -159,8 +138,10 @@ if lift is not None:
     me.hand = [lift]
     me.energy = 3
     m = e3.legal_action_mask()
-    offered = [t for t in range(len(allies)) if m[0 * ENV.MAX_ENEMIES + t] > 0]
-    check("mask offers only the living ally index", offered, [1])
+    base = ENV.FIRST_CARD_ALLY_ACTION + 0 * ENV.MAX_ALLY_TARGETS
+    offered = [t for t in range(ENV.MAX_ALLY_TARGETS) if m[base + t] > 0]
+    check("mask offers only the living ally, by player row", offered, [2])
+    check("...and never the caster's own row 0", m[base + 0], 0.0)
 else:
     print("  [skip] no ALLY card available in this deck")
 
@@ -179,9 +160,78 @@ print("7. an out-of-range actor index falls back to seat order")
 e5 = ENV.CombatEnv(party(2, [44, 88]), lambda: [bag()], seed=7)
 e5.reset()
 e5.engine.players[0].hp, e5.engine.players[1].hp = 44, 88
-e5.active_player_idx = 99          # past the party, as it is after a defeat
+e5.active_player_idx = 99
 obs = e5._observe()
 check("no crash, and slot 0 falls back to seat 0", hp_at(obs, 0), 0.44)
+
+print()
+print("8. every ALLY card lands on the teammate that was CHOSEN")
+# Three of the five used to call _ally_of() and always hit the lowest living
+# seat, so the action space's whole ally axis was a no-op for them. Asserted
+# on STATE, not on the log tail: Demonic Shield exhausts, so its last log
+# line names the card, not the recipient.
+from game_engine.entities import Player as _P, seed_content as _sc
+from game_engine.combat import CombatEngine as _CE
+from game_engine.cards import make_starter_deck as _deck, TargetMode as _TM
+import game_engine.cards as _C
+
+_pool = {}
+for _nm in ("CARD_POOL_IRONCLAD", "COLORLESS_POOL"):
+    for _f in getattr(_C, _nm, []):
+        _c = _f() if callable(_f) else _f
+        _pool[_c.name] = (_f, _c.target)
+_ally_cards = sorted(n for n, (_, t) in _pool.items() if t == _TM.ALLY)
+check("the ALLY cards are all still present", len(_ally_cards), 5)
+
+
+def _snap(p):
+    return (p.block, p.energy, p.hp,
+            tuple(sorted((k.name, v) for k, v in p.statuses.items())))
+
+
+_wrong = []
+for _name in _ally_cards:
+    for _want in (1, 2):
+        _sc(3)
+        _ps = [_P(f"P{i}", 80, 3, _deck()) for i in range(3)]
+        _eng = _CE(_ps, [E.make_nibbit()], seed=3)
+        _eng.start_player_turn()
+        _card = _pool[_name][0]()
+        _ps[0].hand = [_card]
+        _ps[0].energy = 3
+        _ps[0].block = 9
+        _before = [_snap(p) for p in _ps]
+        _eng.play_card(_ps[0], _card, ally_target=_ps[_want])
+        _changed = {i for i in (1, 2) if _snap(_ps[i]) != _before[i]}
+        if _changed != {_want}:
+            _wrong.append(f"{_name}: asked P{_want}, changed {sorted(_changed)}")
+check("ALLY cards affect the chosen teammate and only them", _wrong, [])
+
+print()
+print("9. The Ball's 'random ally' is actually random")
+# It used to call _ally_of(), which returns the FIRST living teammate --
+# indistinguishable from random at 2 players, and simply wrong at 3-4.
+from collections import Counter as _Counter
+_got = _Counter()
+for _seed in range(300):
+    _sc(_seed)
+    _ps = [_P(f"P{i}", 80, 3, _deck()) for i in range(4)]
+    _eng = _CE(_ps, [E.make_nibbit()], seed=_seed)
+    _eng.start_player_turn()
+    _card = _pool["The Ball"][0]()
+    _ps[0].hand = [_card]
+    _ps[0].energy = 3
+    _eng.play_card(_ps[0], _card, target=_eng.enemies[0])
+    for _p in _ps[1:]:
+        if _card in _p.discard_pile:
+            _got[_p.name] += 1
+check("all three teammates receive it at least once",
+      sorted(_got) == ["P1", "P2", "P3"], True)
+# Loose bound: a first-living-seat regression gives 100/0/0, which this
+# catches. Deliberately not a tight chi-square -- that would flake.
+_share = min(_got.values()) / max(1, sum(_got.values()))
+check("no teammate is starved (>15% each; uniform is 33%)",
+      _share > 0.15, True)
 
 print()
 if FAILS:
