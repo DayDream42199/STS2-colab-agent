@@ -21,6 +21,27 @@ class Ally(Unit, ABC):
         self.clear_block()
         self.energy = self.max_energy
 
+    def draw(self, count, rng):
+        """Move cards from draw pile to hand, reshuffling the discard pile in
+        when the draw pile runs dry. Lives here because the piles do; Combat
+        and the InstantDraw effect both go through it."""
+        drawn = []
+        for _ in range(count):
+            if not self.draw_pile:
+                if not self.discard_pile:
+                    break
+                self.draw_pile, self.discard_pile = self.discard_pile, []
+                rng.shuffle(self.draw_pile)
+            card_id = self.draw_pile.pop()
+            self.hand.append(card_id)
+            drawn.append(card_id)
+        return drawn
+
+    def gain_energy(self, amount):
+        """Uncapped on purpose: energy granted mid-turn may exceed max_energy."""
+        if amount > 0:
+            self.energy += amount
+
     def spend_energy(self, amount):
         if amount > self.energy:
             raise ValueError("Not enough energy.")

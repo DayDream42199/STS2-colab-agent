@@ -40,6 +40,14 @@ class Unit(ABC):
         self.current_hp = max(0, self.current_hp - remaining)
         return remaining
 
+    def lose_hp(self, amount):
+        """HP loss ignores block entirely - it is a cost (Breakthrough,
+        Bloodletting), not an attack, so block does not soak it."""
+        if amount <= 0:
+            return 0
+        self.current_hp = max(0, self.current_hp - amount)
+        return amount
+
     def add_block(self, amount):
         if amount > 0:
             self.block += amount

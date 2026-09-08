@@ -1,5 +1,5 @@
 from ._card import Card
-from ._card_enums import CardType, CardRarity, TargetType
+from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.InstantEffects.instant_block import InstantBlock
 
 class Defend(Card):
@@ -8,6 +8,7 @@ class Defend(Card):
             card_id = "defend",
             name = "Defend",
             card_type = CardType.SKILL,
+            card_class = CardClass.IRONCLAD,
             rarity = CardRarity.BASIC,
             cost = 1,
             target_type = TargetType.SELF

@@ -1,7 +1,7 @@
 import random
 
-from GameEngine.Units.Allies.test_ally_1 import TestAlly1
-from GameEngine.Units.Enemies.dummy_1 import Dummy1
+import config
+from GameEngine.Registry.unit_registry import create_ally, create_enemy
 from Protocol.protocol import encode, decode
 from Protocol.enums import ClientMessage, ServerMessage
 
@@ -11,9 +11,9 @@ BROADCAST = None
 PLAYER_TURN = "PLAYER_TURN"
 
 class Session:
-    DEFAULT_REQUIRED_PLAYERS = 1
-    ALLY_CLASS = TestAlly1
-    ENEMY_CLASSES = (Dummy1,)
+    DEFAULT_REQUIRED_PLAYERS = config.REQUIRED_PLAYERS
+    ALLY_TYPE_ID = config.ALLY_TYPE_ID
+    ENEMY_TYPE_IDS = config.ENEMY_TYPE_IDS
 
     def __init__(self, combat_factory, required_players=None, rng=None):
         self.combat_factory = combat_factory
@@ -46,7 +46,9 @@ class Session:
             return [(sid, self._error("Session is full."))]
 
         self._joined_count += 1
-        ally = self.ALLY_CLASS(f"p{self._joined_count}", rng=self.rng)
+        # Goes through the registry: an unregistered ALLY_TYPE_ID raises
+        # KeyError here rather than silently working via a direct import.
+        ally = create_ally(self.ALLY_TYPE_ID, f"p{self._joined_count}", rng=self.rng)
         self.players[sid] = ally
 
         outbound = [(sid, encode(ServerMessage.WELCOME, unit_id=ally.unit_id))]
@@ -81,9 +83,11 @@ class Session:
 
     def _start_combat(self):
         allies = list(self.players.values())
+        # Goes through the registry: an unregistered id in ENEMY_TYPE_IDS
+        # raises KeyError here rather than silently working.
         enemies = [
-            cls(f"e{index + 1}", rng=self.rng)
-            for index, cls in enumerate(self.ENEMY_CLASSES)
+            create_enemy(type_id, f"e{index + 1}", rng=self.rng)
+            for index, type_id in enumerate(self.ENEMY_TYPE_IDS)
         ]
 
         self.combat = self.combat_factory(allies, enemies, rng=self.rng)

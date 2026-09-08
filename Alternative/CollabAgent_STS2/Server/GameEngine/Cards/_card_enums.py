@@ -8,6 +8,13 @@ class CardType(Enum):
     QUEST = auto()
     STATUS = auto()
 
+class CardClass(Enum):
+    """Which character's pool a card belongs to. Orthogonal to CardRarity:
+    a card has both, e.g. Coordinate is COLORLESS and UNCOMMON. Add further
+    characters here as they are implemented."""
+    IRONCLAD = auto()
+    COLORLESS = auto()
+
 class CardRarity(Enum):
     BASIC = auto()
     COMMON = auto()

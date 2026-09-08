@@ -26,7 +26,11 @@ class Dummy1(Enemy):
         intent = self.intent
 
         if intent["type"] == "attack":
-            return [InstantDamage(source=self, target=context.target, amount=intent["amount"])]
+            return [
+                InstantDamage(source=self, target=ally, amount=intent["amount"])
+                for ally in context.all_allies
+                if ally.is_alive()
+            ]
         if intent["type"] == "block":
             return [InstantBlock(source=self, target=self, amount=intent["amount"])]
         if intent["type"] == "debuff_all":

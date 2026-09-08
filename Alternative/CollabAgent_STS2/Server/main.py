@@ -1,5 +1,6 @@
 import time
 
+import config
 from Network.network import Server
 from Network.enums import NetworkEvent
 from session import Session, BROADCAST
@@ -11,11 +12,6 @@ try:
 except ImportError:
     Combat = None
 
-HOST = "0.0.0.0"
-PORT = 5000
-REQUIRED_PLAYERS = 1
-POLL_INTERVAL = 0.01
-
 def main():
     if Combat is None:
         raise SystemExit(
@@ -24,15 +20,15 @@ def main():
         )
 
     server = Server()
-    session = Session(combat_factory=Combat, required_players=REQUIRED_PLAYERS)
+    session = Session(combat_factory=Combat, required_players=config.REQUIRED_PLAYERS)
 
-    server.start(HOST, PORT)
+    server.start(config.HOST, config.PORT)
 
     try:
         while True:
             event = server.get_event()
             if event is None:
-                time.sleep(POLL_INTERVAL)
+                time.sleep(config.POLL_INTERVAL)
                 continue
             if not handle_event(server, session, event):
                 break
@@ -45,7 +41,7 @@ def handle_event(server, session, event):
     network_event = event[0]
 
     if network_event is NetworkEvent.SERVER_STARTED:
-        print(f"Listening on {HOST}:{PORT}, waiting for {REQUIRED_PLAYERS} player(s).")
+        print(f"Listening on {config.HOST}:{config.PORT}, waiting for {config.REQUIRED_PLAYERS} player(s).")
         return True
 
     if network_event is NetworkEvent.START_FAILED:
