@@ -1,0 +1,80 @@
+import time
+
+import config
+from Network.network import Server
+from Network.enums import NetworkEvent
+from session import Session, BROADCAST
+
+try:
+    from GameEngine.Combat.combat import Combat
+except ImportError:
+    Combat = None
+
+def main():
+    if Combat is None:
+        raise SystemExit(
+            "GameEngine/Combat/combat.py is not implemented yet. Everything else "
+            "is ready; see COMBAT_INTERFACE.md for the surface it must provide."
+        )
+
+    server = Server()
+    session = Session(combat_factory=Combat, required_players=config.REQUIRED_PLAYERS)
+
+    server.start(config.HOST, config.PORT)
+
+    try:
+        while True:
+            event = server.get_event()
+            if event is None:
+                time.sleep(config.POLL_INTERVAL)
+                continue
+            if not handle_event(server, session, event):
+                break
+    except KeyboardInterrupt:
+        print("Shutting down.")
+    finally:
+        server.shutdown()
+
+def handle_event(server, session, event):
+    network_event = event[0]
+
+    if network_event is NetworkEvent.SERVER_STARTED:
+        print(f"Listening on {config.HOST}:{config.PORT}, waiting for {config.REQUIRED_PLAYERS} player(s).")
+        return True
+
+    if network_event is NetworkEvent.START_FAILED:
+        print(f"Failed to start server: {event[1]}")
+        return False
+
+    if network_event is NetworkEvent.CLIENT_CONNECTED:
+        sid = event[1]
+        print(f"Client connected: {sid}")
+        dispatch(server, session.add_player(sid))
+        return True
+
+    if network_event is NetworkEvent.CLIENT_DISCONNECTED:
+        sid = event[1]
+        print(f"Client disconnected: {sid}")
+        dispatch(server, session.remove_player(sid))
+        return True
+
+    if network_event is NetworkEvent.MESSAGE_RECEIVED:
+        sid, data = event[1], event[2]
+        dispatch(server, session.handle(sid, data))
+        return True
+
+    if network_event in (NetworkEvent.SEND_FAILED, NetworkEvent.CLIENT_DISCONNECT_FAILED):
+        print(f"Network error: {event[1]}")
+        return True
+
+    return True
+
+def dispatch(server, outbound):
+    for recipient, message in outbound:
+        if recipient is BROADCAST:
+            server.broadcast(message)
+        else:
+            server.send(recipient, message)
+
+if __name__ == "__main__":
+    main()
