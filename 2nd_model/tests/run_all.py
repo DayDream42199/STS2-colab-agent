@@ -27,7 +27,8 @@ SCRIPTS = [
     "test_reactive.py",
     "test_fork.py",        # card identity, upgrades, and every batch since
     "test_choice.py",      # player choice through Session
-    "test_enemies.py",     # scripted enemies, co-op scaling, The Insatiable
+    "test_enemies.py",     # scripted enemies, the bosses, the Act 1 pool
+    "test_scaling.py",     # every enemy at 1-4 players: what scales, what must not
     "test_review.py",
     "test_bughunt.py",
     "audit_structure.py",  # every card / status / effect / upgrade entry is well-formed

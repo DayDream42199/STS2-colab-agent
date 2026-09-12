@@ -3,6 +3,7 @@ from ._status_effect import StatusEffect
 
 class Vulnerable(StatusEffect):
     IS_DEBUFF = True
+    ATTACKS_ONLY = True      # Burn on a Vulnerable player is still 2
     MULTIPLIER = 1.5
     DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE
 

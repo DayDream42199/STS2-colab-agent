@@ -7,6 +7,7 @@ class Exposed(StatusEffect):
     Knockdown's co-op clause: it sets a target up for your teammates."""
 
     IS_DEBUFF = True
+    ATTACKS_ONLY = True
 
     MULTIPLIER = 2.0
     DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE

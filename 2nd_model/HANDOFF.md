@@ -33,8 +33,9 @@ for how to add a card.
 | Exhaust-pile routing, `retain`, `ethereal`, `retain_hand` | `CardProperties` flags that nothing enforced. |
 | `act`, `scale_enemies` on the constructor; scaling in `start()` | Real STS2 co-op: enemy HP × players × act factor, and enemy Block × 2 for two players. Off with one player. |
 | `_enemy_target` | A scripted enemy names its victim when it chooses its intent; this honours that if they are still alive. |
+| `MAX_ALLIES = 4`, checked in the constructor | Co-op is one to four players. Nothing enforced it, and the scaling multiplies happily past it. `session.py` reads the cap off the factory and refuses a bad `REQUIRED_PLAYERS` at startup rather than when the last player joins. No enemy cap: the real game bounds summoning per encounter (a Two-Tailed Rat group gets three Call for Backups in total), so that belongs to the summoner when one is ported. |
 
-**Four ordering fixes**, each found by a test that failed:
+**Six ordering fixes**, each found by a test that failed:
 
 1. **Cost paid and card popped from hand *before* resolving**, discard appended
    *after*. A card that reads its own discard pile (Stack) must not count
@@ -50,6 +51,15 @@ for how to add a card.
 4. **Dead allies are excluded** from playing cards, holding hands, and
    receiving statuses. A dead ally could previously play a card and win the
    fight.
+5. **A held card reacts to its holder's `TURN_END` only.** The event is
+   emitted once per player, and `_emit` walked every hand for every emission,
+   so a Burn dealt 2 × the player count. Invisible in every solo test; the
+   Wriggler's Infection in a two-player fight showed 6 where 3 was due.
+6. **Vulnerable multiplies attacks only.** The resolver ran every incoming
+   modifier on every damage, so a Burn on a Vulnerable player dealt 3. The
+   reference gates its defender multiplier on `source_is_attack`; a status now
+   declares `ATTACKS_ONLY` (Vulnerable, Exposed, Colossus Guard do; Intangible,
+   Tank and Protected still cap or scale everything). Found by Constrict.
 
 ## Resolution
 
@@ -69,16 +79,20 @@ worth knowing about:
 | `Cards/` | 223 registered cards |
 | `Cards/_card_ref.py` | `CardRef` — the per-copy identity piles hold |
 | `Cards/_upgrades.py` | what an upgrade changes, per card, in one table |
-| `Effects/StatusEffects/` | 64 statuses |
+| `Effects/StatusEffects/` | 67 statuses |
 | `Effects/InstantEffects/` | 17 instant effects |
 | `Registry/card_registry.py` | `create_card(card_id)`, `known_card_ids()` |
 | `Registry/coverage.py` | run it directly: which of the 230 planned cards are done, and what is blocking the rest |
-| `Units/Enemies/_scripted.py` | `Move` + `ScriptedEnemy`: the shape every real enemy uses |
-| `Units/Enemies/the_insatiable.py`, `aeonglass.py` | the first two real enemies, both bosses; 2 of 98 in the reference |
+| `Units/Enemies/_scripted.py` | `Move` + `ScriptedEnemy`: the shape every real enemy uses; `attack()` / `buff()` / `guard()` / `hand_out()` helpers, `HP_RANGE`, `NAME` |
+| `Units/Enemies/the_insatiable.py`, `aeonglass.py` | two bosses |
+| `Units/Enemies/leaf_slime.py`, `twig_slime.py`, `wriggler.py` | five Act 1 enemies that hand out Slimed and Infection |
+| `Units/Enemies/nibbit.py`, `snapping_jaxfruit.py`, `fuzzy_wurm_crawler.py`, `raiders.py` | eight more Act 1 enemies, damage / Strength / Block / debuff cycles |
+| `Units/Enemies/flyconid.py`, `slithering_strangler.py`, `vine_shambler.py`, `shrinker_beetle.py`, `mawler.py`, `cubex_construct.py` | the Act 1 debuffers, with three new statuses: Shrink, Constrict, Tangled; 21 of 98 in the reference |
 
 Values come from a reference engine, not from memory. `coverage.py` records the
 13 cards that **cannot** exist here (other characters' tokens, quest items) and
-the 1 blocked on a system that does not exist yet, each with the reason named.
+the 2 deliberately left out (Alchemize needs potions; Mad Science (Improvement)
+edits the deck after the fight), each with the reason named.
 Nothing is unaccounted for: every card on the list is ported, excluded, or
 carries a stated blocker.
 
@@ -107,13 +121,14 @@ details, and the traps, are in COMBAT_INTERFACE.md.
 python tests/run_all.py
 ```
 
-Eighteen scripts, about twenty seconds, one verdict: twelve suites (the card
+Nineteen scripts, under half a minute, one verdict: thirteen suites (the card
 slice against reference values, one per ported batch, a regression pass, a
-bug hunt, the choice round trip through Session), a structural audit of every
-card, status, effect and upgrade entry, every card played plain, upgraded and
-with Replay, the card matrix (below) over the whole registry, a determinism
-check (same seed, byte-identical fight), and a fuzzer that plays 300 whole
-fights with random decks from the entire registry. Every script exits non-zero
+bug hunt, the choice round trip through Session, every enemy at 1–4 players),
+a structural audit of every card, status, effect and upgrade entry, every card
+played plain, upgraded and with Replay, the card matrix (below) over the whole
+registry, a determinism check (same seed, byte-identical fight), and a fuzzer
+that plays 300 whole fights with random decks and mixed enemy lineups from the
+entire registry. Every script exits non-zero
 on failure, so the runner needs nothing from their output; `run_all.py fork
 cost` runs only the suites matching those words.
 
@@ -144,7 +159,11 @@ real server configured for a boss.
 ## Not done
 
 - **14 of the 230 planned cards**: 13 that cannot exist here, and Alchemize,
-  which needs potions. Every other card on the list is in.
+  which needs potions. Every other card on the list is in. The sheet's Effect
+  tab also names a ninth Mad Science variant, *Improvement* ("at the end of
+  combat, Upgrade a random card") - skipped on purpose, recorded in
+  `coverage.py`. The Effect tab's other 53 unported entries are all enemy
+  mechanics waiting on their enemies; the Thorns it lists is our `caltrops`.
 - **True Grit+ still picks at random.** Its base printing genuinely says "at
   random", so only the upgraded half should ask, and the card does not yet
   split the two. The other twelve choice cards now ask the player.

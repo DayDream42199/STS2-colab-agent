@@ -5,11 +5,15 @@ from ..Context.context import Context
 from ..Events.game_event import GameEvent
 from ..Resolution.resolver import Resolver
 from ..Registry.card_registry import create_card
+from ..Registry.unit_registry import create_enemy
 from ..Cards._card import Card
 from ..Cards._card_enums import CardType, TargetType
 from ..Cards._card_ref import new_ref, take
 from ..Effects.InstantEffects.instant_damage import InstantDamage
 from ..Effects.InstantEffects.instant_move_card import InstantMoveCard
+from ..Effects.InstantEffects.instant_summon import InstantSummon
+from ..Effects.StatusEffects.minion import Minion
+from ..Effects.StatusEffects.stun import Stun
 from ..Units.Enemies._scripted import hp_scale, block_scale
 from ..Effects.InstantEffects.instant_play_card import InstantPlayCard
 
@@ -28,6 +32,9 @@ class CombatResult(Enum):
 
 class Combat:
     HAND_SIZE = 5
+    # Co-op is one to four players. Refused at construction rather than
+    # scaled into nonsense: hp_scale and block_scale keep multiplying past it.
+    MAX_ALLIES = 4
     # A reaction may cause a reaction; bounded so two powers cannot ping-pong.
     MAX_EVENT_DEPTH = 3
     # Havoc turning up Havoc is legal, and has to terminate.
@@ -54,6 +61,9 @@ class Combat:
     def __init__(self, allies, enemies, rng=None, act="act1", scale_enemies=True):
         self.allies = list(allies)
         self.enemies = list(enemies)
+        if not 1 <= len(self.allies) <= self.MAX_ALLIES:
+            raise ValueError(
+                f"A combat takes 1 to {self.MAX_ALLIES} players, not {len(self.allies)}.")
         self.rng = rng if rng is not None else random.Random()
         # Co-op scaling: enemy HP is multiplied by player count and an act
         # factor, as in STS2. Off for a test that wants the printed numbers.
@@ -64,6 +74,10 @@ class Combat:
         self.result = None
         self._event_depth = 0
         self._play_depth = 0
+        # 1 on the first player turn. Mirrored into combat_counters["turn"] so
+        # an enemy choosing its intent can read it (a Two-Tailed Rat group
+        # calls for backup at most once a turn).
+        self.turn_number = 0
         # Whole-fight tallies belonging to no unit: Midnight's "by ANYONE".
         self.combat_counters = {}
 
@@ -82,19 +96,14 @@ class Combat:
     # --- lifecycle -------------------------------------------------------
 
     def start(self):
-        if self.scale_enemies:
-            players = len(self.allies)
-            mult = hp_scale(players, self.act)
-            for enemy in self.enemies:
-                if mult != 1.0:
-                    enemy.max_hp = max(1, round(enemy.max_hp * mult))
-                    enemy.current_hp = enemy.max_hp
-                enemy.block_scale = block_scale(players, self.act)
+        for enemy in self.enemies:
+            self._scale_enemy(enemy)
 
         for ally in self.allies:
             self._build_draw_pile(ally)
             self._turn_draw(ally)
 
+        self._new_turn()
         for enemy in self.enemies:
             enemy.choose_intent(self._context_for(enemy))
 
@@ -103,6 +112,99 @@ class Combat:
             unit.reset_turn_counters()
         for ally in self.allies:
             self._emit(GameEvent.TURN_START, ally)
+
+    def _new_turn(self):
+        self.turn_number += 1
+        self.combat_counters["turn"] = self.turn_number
+
+    def _scale_enemy(self, enemy):
+        """Co-op scaling, once, for an enemy present at the start or summoned
+        later. Bosses and slimes alike."""
+        if not self.scale_enemies:
+            return
+        players = len(self.allies)
+        mult = hp_scale(players, self.act)
+        if mult != 1.0:
+            enemy.max_hp = max(1, round(enemy.max_hp * mult))
+            enemy.current_hp = enemy.max_hp
+        enemy.block_scale = block_scale(players, self.act)
+
+    # --- summoning ----------------------------------------------------------
+
+    def summon(self, type_ids, summoner=None, stunned=False, minion=False):
+        """Bring enemies into an ongoing fight. Returns them.
+
+        Each arrives scaled for the party, with a unit id nobody holds, an
+        intent already chosen (so the client sees it at once), and `summoner`
+        as its leader. It does not act in the enemy phase that summoned it -
+        the phase walks a snapshot of the lineup - and `stunned` makes it sit
+        out the next one as well, as the reference does for backup."""
+        arrived = []
+        for type_id in type_ids:
+            enemy = create_enemy(type_id, self._free_enemy_id(), rng=self.rng)
+            self._scale_enemy(enemy)
+            enemy.leader = summoner
+            if minion:
+                enemy.apply_status(Minion(source=summoner, target=enemy))
+            if stunned:
+                enemy.apply_status(Stun(source=summoner, target=enemy, amount=1))
+            self.enemies.append(enemy)
+            enemy.choose_intent(self._context_for(enemy))
+            arrived.append(enemy)
+        return arrived
+
+    def _free_enemy_id(self):
+        n = len(self.enemies) + 1
+        while self.find_unit(f"e{n}") is not None:
+            n += 1
+        return f"e{n}"
+
+    def _resolve_summon(self, effect):
+        arrived = self.summon(effect.type_ids, summoner=effect.source,
+                              stunned=effect.stunned, minion=effect.minion)
+        return {
+            "effect_id": effect.effect_id,
+            "source_id": effect.source.unit_id,
+            "target_id": effect.source.unit_id,
+            "summoned": [e.unit_id for e in arrived],
+            "amount": len(arrived),
+        }
+
+    def _resolve_deaths(self):
+        """Run what a dead enemy does on dying, once, before the fight can end.
+
+        Phrog Parasite's Wrigglers arrive here, so killing it as the last
+        enemy does not win the fight. Then any Minion whose leader just died
+        leaves, with no death of its own to resolve: it left, it was not
+        killed. Loops because a death can cause another."""
+        progress = True
+        while progress:
+            progress = False
+            for enemy in list(self.enemies):
+                if enemy.is_alive() or getattr(enemy, "death_resolved", False):
+                    continue
+                enemy.death_resolved = True
+                progress = True
+                for other in self.enemies:
+                    if (other.is_alive() and getattr(other, "leader", None) is enemy
+                            and other.get_status("minion") is not None):
+                        other.current_hp = 0
+                        other.death_resolved = True
+                on_death = getattr(enemy, "on_death", None)
+                if on_death is not None:
+                    for effect in on_death(self._context_for(enemy)) or ():
+                        self._resolve(effect)
+
+    def _revive_due(self):
+        """After an enemy phase: an enemy scheduled to come back (Illusion)
+        counts down, and returns with a fresh intent when it reaches zero."""
+        for enemy in self.enemies:
+            due = getattr(enemy, "revive_in", 0)
+            if enemy.is_alive() or due <= 0:
+                continue
+            enemy.revive_in = due - 1
+            if enemy.revive_in <= 0:
+                enemy.revive()          # the intent loop that follows gives it a move
 
     def is_over(self):
         return self.result is not None
@@ -403,6 +505,8 @@ class Combat:
             return
 
         self._tick_statuses(self.enemies)
+        self._new_turn()
+        self._revive_due()
         for enemy in self.enemies:
             if enemy.is_alive():
                 enemy.choose_intent(self._context_for(enemy))
@@ -629,16 +733,16 @@ class Combat:
                     event, self._context_for(subject, subject, payload))
                 if out:
                     produced.extend(out)
-        elif event in self.HAND_EVENTS:
-            for ally in self.allies:
-                if not ally.is_alive():
-                    continue
-                for card_id in list(ally.hand):
-                    card = create_card(card_id)
-                    out = card.on_event(
-                        event, self._context_for(ally, subject, payload))
-                    if out:
-                        produced.extend(out)
+        elif event in self.HAND_EVENTS and subject in self.allies and subject.is_alive():
+            # Only the hand of the player whose turn is ending. TURN_END is
+            # emitted once per ally, so walking every hand here fired a Burn
+            # once per player in the fight: 2 damage solo, 4 in a duo.
+            for card_id in list(subject.hand):
+                card = create_card(card_id)
+                out = card.on_event(
+                    event, self._context_for(subject, subject, payload))
+                if out:
+                    produced.extend(out)
 
         self._event_depth += 1
         try:

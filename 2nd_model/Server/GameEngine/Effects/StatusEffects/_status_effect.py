@@ -9,6 +9,11 @@ class StatusEffect(Effect):
     # Something an opponent did to you, rather than a buff. Rend counts these.
     IS_DEBUFF = False
 
+    # Whether modify_incoming_damage is consulted only for attacks. Vulnerable
+    # is: a Burn or Constrict on a Vulnerable player deals its printed number,
+    # as in the reference. Intangible is not: it caps every kind of damage.
+    ATTACKS_ONLY = False
+
     def modify_incoming_damage(self, amount, attacker=None):
         # `attacker` is who is hitting (Colossus), None when unattributed.
         return amount

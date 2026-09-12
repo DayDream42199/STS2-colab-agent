@@ -51,6 +51,9 @@ EXCLUDED = {
 DEFERRED = {
     # Never in scope for a combat replica.
     "Alchemize": "potions - no potion system ported",
+    # The ninth Mad Science variant: "At the end of combat, Upgrade a random
+    # card." Deck editing between fights. The other eight are in (mad_science.py).
+    "Mad Science (Improvement)": "end-of-combat deck upgrade - deliberately skipped",
 }
 
 

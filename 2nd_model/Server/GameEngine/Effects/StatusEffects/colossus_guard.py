@@ -8,6 +8,7 @@ class ColossusGuard(StatusEffect):
     Clears on the owner's next TURN_START, not the end-of-turn tick, which
     runs before the enemy phase."""
 
+    ATTACKS_ONLY = True
     REDUCTION = 0.5
     DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE
 

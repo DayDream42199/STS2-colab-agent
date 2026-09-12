@@ -9,11 +9,12 @@ import json, random, sys, traceback, collections
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Server"))
 from GameEngine.Combat.combat import Combat
-from GameEngine.Registry.unit_registry import create_ally, create_enemy
+from GameEngine.Registry.unit_registry import create_ally, create_enemy, known_enemy_type_ids
 from GameEngine.Registry.card_registry import create_card, known_card_ids
 from GameEngine.Cards._card_enums import TargetType
 
 ALL = known_card_ids()
+ENEMIES = known_enemy_type_ids()
 REFUSAL = (ValueError, IndexError, RuntimeError)
 
 def one_fight(seed, ask_players, turns=12, deck_size=15):
@@ -23,9 +24,10 @@ def one_fight(seed, ask_players, turns=12, deck_size=15):
     for a in allies:
         a.deck = [rng.choice(ALL) for _ in range(deck_size)]
         a.max_hp = a.current_hp = 300
-    kind = ("dummy1", "theinsatiable", "aeonglass")[seed % 3]
-    enemies = [create_enemy(kind, "e%d" % (i + 1), rng=random.Random(seed + 10 + i))
-               for i in range(rng.randint(1, 2))]
+    # Mixed lineups from everything registered: a boss next to a slime is not
+    # a real encounter, but every pairing has to survive.
+    enemies = [create_enemy(rng.choice(ENEMIES), "e%d" % (i + 1), rng=random.Random(seed + 10 + i))
+               for i in range(rng.randint(1, 3))]
     c = Combat(allies, enemies, rng=random.Random(seed))
     c.ask_players = ask_players
     c.start()

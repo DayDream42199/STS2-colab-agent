@@ -53,7 +53,7 @@ from GameEngine.Effects.StatusEffects.vulnerable import Vulnerable
 # ---------------------------------------------------------------- settings --
 CARD = "*"        # the card under test; the command line overrides it
 ALLIES = (1, 2)        # party sizes to try
-ENEMIES = (1, 2)       # enemy counts to try
+ENEMIES = (1, 13)       # enemy counts to try
 ENEMY = "dummy1"       # dummy1 / theinsatiable / aeonglass
 ENERGY = 3             # raised to the card's cost when it costs more
 ENEMY_HP = 500         # nothing dies by accident; "enemy at 1 HP" is where it does

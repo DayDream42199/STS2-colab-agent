@@ -18,6 +18,12 @@ class Session:
         self.required_players = (
             required_players if required_players is not None else self.DEFAULT_REQUIRED_PLAYERS
         )
+        # Combat's party cap, checked now so a bad REQUIRED_PLAYERS fails at
+        # startup with a message, not when the last player joins.
+        cap = getattr(combat_factory, "MAX_ALLIES", None)
+        if self.required_players < 1 or (cap is not None and self.required_players > cap):
+            raise ValueError(
+                f"REQUIRED_PLAYERS must be 1 to {cap}, not {self.required_players}.")
         self.rng = rng if rng is not None else random.Random()
 
         self.combat = None

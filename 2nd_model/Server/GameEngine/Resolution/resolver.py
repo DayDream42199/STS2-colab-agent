@@ -71,7 +71,8 @@ class Resolver:
                 amount = status.modify_outgoing_damage(amount, target)
 
         for status in Resolver._ordered(target):
-            amount = status.modify_incoming_damage(amount, effect.source)
+            if effect.is_attack or not status.ATTACKS_ONLY:
+                amount = status.modify_incoming_damage(amount, effect.source)
 
         amount = max(0, int(amount))
         was_alive = target.is_alive()
@@ -346,8 +347,11 @@ class Resolver:
     def _resolve_instant_block(effect):
         target = effect.target
         # Co-op scaling for an enemy's own Block, before Dexterity and the
-        # multipliers, as in the reference. Allies have no block_scale.
-        amount = effect.amount * getattr(target, "block_scale", 1.0)
+        # multipliers, as in the reference. Allies have no block_scale. Rounded
+        # like the reference, not floored: Reload's 3 at three players is
+        # 3 x 3.3 = 9.9, and the reference blocks 10.
+        scale = getattr(target, "block_scale", 1.0)
+        amount = round(effect.amount * scale) if scale != 1.0 else effect.amount
         for status in Resolver._ordered(target):
             amount = status.modify_block_gained(amount)
         amount = max(0, int(amount))

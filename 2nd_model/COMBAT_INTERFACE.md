@@ -17,7 +17,7 @@ this. The surface has not changed since it was first written.
 
 | Call | Expectation |
 |---|---|
-| `Combat(allies, enemies, rng=rng, act="act1", scale_enemies=True)` | Constructor. `allies` and `enemies` arrive already built. `rng` is a seeded `random.Random` — use it for every shuffle and random choice so runs stay reproducible. `act` and `scale_enemies` drive co-op HP scaling (below); both come from `config.py`. |
+| `Combat(allies, enemies, rng=rng, act="act1", scale_enemies=True)` | Constructor. `allies` and `enemies` arrive already built; 1 to `Combat.MAX_ALLIES` (4) players, or it raises `ValueError`. `rng` is a seeded `random.Random` — use it for every shuffle and random choice so runs stay reproducible. `act` and `scale_enemies` drive co-op HP scaling (below); both come from `config.py`. |
 | `.start()` | Set up draw piles, deal opening hands, choose first intents. |
 | `.is_over()` | `bool`. |
 | `.phase.name` | Enum-like. Session only tests `== "PLAYER_TURN"`. |
@@ -204,7 +204,9 @@ so their upgrade is currently a no-op.
 
 14 of the 230 planned cards. `python Registry/coverage.py` prints the split:
 13 cannot exist in an Ironclad-only co-op run, and Alchemize needs a potion
-system, which was never in scope. Nothing is unaccounted for.
+system, which was never in scope. A ninth Mad Science variant, Improvement
+("at the end of combat, Upgrade a random card"), is skipped as deck editing
+between fights. Nothing is unaccounted for.
 
 Two cards have no values in the reference engine and were ported from the
 game itself:
@@ -250,12 +252,77 @@ never scaled. HP: × player count × act factor (act1 1.1, act2 1.2, act3 1.2,
 act3boss 1.3) — The Insatiable is 321 alone, 770 for two in act 2. Block an
 enemy gains: flat × 2 for two players, × players × act factor beyond; the
 resolver applies `enemy.block_scale` before Dexterity, as the reference does.
-Aeonglass's Ebb blocks 33 alone and 66 for two. One nuance: the reference
-`round()`s the scaled Block and we `int()` it, which can differ by 1 only at
-three or more players.
+Aeonglass's Ebb blocks 33 alone, 66 for two, 109 for three (33 × 3.3 = 108.9,
+rounded as the reference does). Nothing else scales: an enemy's damage, the
+Strength it gains and the status cards it hands out are the same numbers for
+one player or four, and each move names one living player. `tests/test_scaling.py`
+runs every scripted enemy at 1–4 players in two acts and checks all of that
+turn by turn against the solo run.
 
 A `Move` can be `targeted=True` without being an Attack — Aeonglass's
 Intensity is a debuff that still names one player.
+
+Most Act 1 enemies are two moves long, so five helpers cover them:
+`attack("Tackle", 3)` is a Move hitting the announced target (`hits=2` for a
+double, `block=5` for one that guards as it swings, `inflict=(Frail, 2)` for a
+rider on the victim, `gain=(Strength, 2)` for one on the attacker),
+`buff("Hiss", Strength, 2)` and `guard("Reload", 3)` are the Strength and
+Block moves, `debuff("Roar", Vulnerable, 3)` puts a status on one named player,
+and `hand_out("slimed", 2)` builds the effects that put status cards into the
+target's discard pile. `HP_RANGE = (32, 35)` rolls the wiki's range once per
+fight from the seeded rng (replacing `DEFAULT_MAX_HP`), and `NAME = "Leaf
+Slime (M)"` is what the client shows instead of the class name. A whole
+slime is twelve lines:
+
+```python
+class LeafSlimeMedium(ScriptedEnemy):
+    NAME = "Leaf Slime (M)"
+    HP_RANGE = (32, 35)
+
+    def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
+        super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
+        sticky = Move("Sticky Shot", Move.DEBUFF, hand_out("slimed", 2), targeted=True)
+        self._cycle = (sticky, attack("Clump Shot", 8))
+
+    def pick_move(self, turn):
+        return self._cycle[turn % 2]
+```
+
+The plain Act 1 pool — Nibbit, Snapping Jaxfruit, Fuzzy Wurm Crawler, and the
+Assassin / Axe / Brute / Crossbow Raiders (`raiders.py`) — is built from those
+four helpers alone; `test_enemies.py` holds each one's script as a table of
+(move, damage taken, Block after, Strength after) per turn. Two things to know
+when reading them: an enemy's Block clears at the start of **its own** turn,
+so Crossbow Raider's Reload never protects it from the player (as in the
+reference), and Snapping Jaxfruit gains its Strength *after* the orb lands, so
+the orbs go 3, 5, 7.
+
+The Act 1 debuffers — Flyconid, Slithering Strangler, Vine Shambler, Shrinker
+Beetle, Mawler, Tracker Raider, Cubex Construct — brought three statuses:
+
+- **Shrink** (Shrinker Beetle, 3 turns): the player's Attacks deal 30% less;
+  stacks with Weak (6 → 4 → 3). The wiki's "removed when the applier dies" is
+  modelled here, which the reference notes it does not do: a status knows its
+  `source`, so a dead Beetle's Shrink does nothing and is culled at the next tick.
+- **Constrict** (Slithering Strangler, 3): at the end of each of the player's
+  turns, 3 damage while the Strangler lives. Never decays; Block stops it;
+  Vulnerable does not touch it (see below); gone once the Strangler is dead.
+- **Tangled** (Vine Shambler): Attacks cost 1 more, one turn per stack. Applied
+  before the free-play grants are consulted, so an Attack Unrelenting made free
+  stays free. The reference applies **1** where its own note quotes the wiki as
+  "for 2 turns"; the reference's number is used (`VineShambler.TANGLED`).
+
+Fogmog is the one Act 1 normal left out: Illusory Spores *summons* an Eye With
+Teeth, and `Combat` has no way to add an enemy after `start()` yet — the
+newcomer would need an intent chosen and the co-op scaling applied. That is
+the next engine feature, shared with Phrog Parasite and Two-Tailed Rat.
+
+**A status can be attack-only.** `StatusEffect.ATTACKS_ONLY = True` means its
+`modify_incoming_damage` is consulted for attacks alone — Vulnerable, Exposed
+and Colossus Guard — so a Burn, a Constrict or a Wither on a Vulnerable player
+deals its printed number, as in the reference. Intangible, Tank and Protected
+leave it False and cap or scale every kind of damage. Before this a Burn on a
+Vulnerable player dealt 3.
 
 `Dummy1` predates this and still hits every ally at once; it is a test target,
 not a model.
@@ -277,10 +344,18 @@ ported. Two need the enemy to pass per-copy state, which `CardRef` carries:
   reads `AMOUNT + bonus_damage`, so it deals 3, 4, 5... The client sees only
   `"wither"` in hand; the bonus is not on the wire yet (see the `hand_cards`
   note above).
+- **Leaf Slime (S/M), Twig Slime (M)** (`leaf_slime.py`, `twig_slime.py`) —
+  Goop / Sticky Shot put 1 or 2 `slimed` into one named player's discard pile,
+  then the slime hits, alternating from the shot. Twig Slime (S) only Tackles.
+- **Wriggler** (`wriggler.py`) — Wriggle gives one player an `infection` and
+  the Wriggler 2 Strength; Nasty Bite follows.
 
 Self-inflicted status damage (Burn, Toxic, Wither, Infection, Decay,
 Disintegration) is `is_attack=False`, as in the reference: it meets Block but
-takes no Strength and triggers nothing that reacts to being attacked.
+takes no Strength and triggers nothing that reacts to being attacked. A card
+held at end of turn reacts to **its holder's** `TURN_END` only — `TURN_END` is
+emitted once per player, and the hand walk used to run for every emission, so
+a Burn dealt 2 per player in the fight. Found by the Wriggler's Infection.
 
 ## Player choice
 
