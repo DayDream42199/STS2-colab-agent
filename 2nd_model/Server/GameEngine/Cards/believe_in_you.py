@@ -18,7 +18,5 @@ class BelieveInYou(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         return [InstantEnergy(
             source=context.source, target=context.target, amount=self.ENERGY)]

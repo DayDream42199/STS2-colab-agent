@@ -9,7 +9,8 @@ class InstantAddCard(InstantEffect):
     DISCARD = "discard_pile"
     HAND = "hand"
 
-    def __init__(self, source, target, card_id, pile=DISCARD, amount=1, rng=None):
+    def __init__(self, source, target, card_id, pile=DISCARD, amount=1, rng=None,
+                 bottom=False):
         super().__init__("instant_add_card")
         self.source = source
         self.target = target
@@ -17,3 +18,6 @@ class InstantAddCard(InstantEffect):
         self.pile = pile
         self.amount = amount
         self.rng = rng
+        # Draw pile only: under everything, drawn last. Otherwise on top with
+        # no rng, or at random depths with one.
+        self.bottom = bottom

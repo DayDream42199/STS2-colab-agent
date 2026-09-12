@@ -31,6 +31,8 @@ for how to add a card.
 | `_resolve_target` covering all 7 `TargetType`s | `ALL_ALLIES`, `RANDOM_ALLY`, `RANDOM_ENEMY` were unreachable. Also validates: a dead or non-existent target now raises instead of resolving. |
 | `_build_draw_pile` innate handling | Innate cards go last after the shuffle, since the pile is drawn from the end. No special case in the draw loop. |
 | Exhaust-pile routing, `retain`, `ethereal`, `retain_hand` | `CardProperties` flags that nothing enforced. |
+| `act`, `scale_enemies` on the constructor; scaling in `start()` | Real STS2 co-op: enemy HP × players × act factor, and enemy Block × 2 for two players. Off with one player. |
+| `_enemy_target` | A scripted enemy names its victim when it chooses its intent; this honours that if they are still alive. |
 
 **Four ordering fixes**, each found by a test that failed:
 
@@ -71,6 +73,8 @@ worth knowing about:
 | `Effects/InstantEffects/` | 17 instant effects |
 | `Registry/card_registry.py` | `create_card(card_id)`, `known_card_ids()` |
 | `Registry/coverage.py` | run it directly: which of the 230 planned cards are done, and what is blocking the rest |
+| `Units/Enemies/_scripted.py` | `Move` + `ScriptedEnemy`: the shape every real enemy uses |
+| `Units/Enemies/the_insatiable.py`, `aeonglass.py` | the first two real enemies, both bosses; 2 of 98 in the reference |
 
 Values come from a reference engine, not from memory. `coverage.py` records the
 13 cards that **cannot** exist here (other characters' tokens, quest items) and
@@ -99,13 +103,43 @@ details, and the traps, are in COMBAT_INTERFACE.md.
 
 ## Verified
 
-Twelve suites and a full-registry sweep, all passing: the card slice against
-reference values, one suite per ported batch, a regression pass, a bug hunt,
-every card played plain, upgraded and with Replay, the choice round trip
-through Session, a live 2-player fight over socket.io, and a live choice —
-server asks, player answers, card finishes. Seeded runs are byte-identical
-across processes, which the training runs rely on. They live outside this
-folder — say the word and they move in-tree.
+```bash
+python tests/run_all.py
+```
+
+Eighteen scripts, about twenty seconds, one verdict: twelve suites (the card
+slice against reference values, one per ported batch, a regression pass, a
+bug hunt, the choice round trip through Session), a structural audit of every
+card, status, effect and upgrade entry, every card played plain, upgraded and
+with Replay, the card matrix (below) over the whole registry, a determinism
+check (same seed, byte-identical fight), and a fuzzer that plays 300 whole
+fights with random decks from the entire registry. Every script exits non-zero
+on failure, so the runner needs nothing from their output; `run_all.py fork
+cost` runs only the suites matching those words.
+
+`tests/card_matrix.py <card>` plays one card through every situation and
+prints a diff per row: 1 or 2 allies × 1 or 2 enemies × plain or upgraded,
+aimed at each legal target; then Strength, Weak, Dexterity, Frail, enemy
+Vulnerable, Block on either side, a lethal enemy, a dying player, an
+all-Attack hand, a second copy, a full hand, empty piles and Replay; then the
+illegal moves (no target, dead target, wrong pool, self as "another player",
+0 energy, bad index, dead player, finished fight, and for a card that asks a
+question: playing or ending the turn before answering, and a bad option),
+each of which must be refused and change nothing. Choice cards get one row
+per option. Each row shows the play, a Strike played after it, and the end
+of turn. `--save` approves the table into `tests/golden/<card>.json`; from
+then on any change to that card's behaviour fails the run. `all` runs every
+card and prints only failures. The first run found six co-op cards
+(Believe In You, Blaze, Coordinate, Demonic Shield, Lift, Mimic) refusing a
+self target from inside `get_effects` — after the energy was spent and the
+card had left the hand. The check now lives in `Combat._resolve_target`,
+before either.
+
+`tests/live/` holds the socket tests. They need a server up:
+`python Server/main.py` then `tests/live/live2p.py`; or
+`tests/live/choice_server.py` (the real server with an all-Wish deck) then
+`tests/live/live_choice.py`. `tests/live/boss_server.py [aeonglass]` is the
+real server configured for a boss.
 
 ## Not done
 
@@ -118,6 +152,5 @@ folder — say the word and they move in-tree.
   does not clear `hand` / `discard_pile` / `exhaust_pile`, so reusing an `Ally`
   for a second fight would carry them over. Harmless today — `_start_combat`
   refuses a second combat — but it is yours to decide before runs exist.
-- **No tests in-tree.** Everything above is verified, but from a scratch folder.
 - `python-socketio`'s *client* also needs `pip install requests websocket-client`;
   the server side only needs `eventlet` and `python-socketio`.

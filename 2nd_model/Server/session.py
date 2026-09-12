@@ -91,7 +91,9 @@ class Session:
             for index, type_id in enumerate(self.ENEMY_TYPE_IDS)
         ]
 
-        self.combat = self.combat_factory(allies, enemies, rng=self.rng)
+        self.combat = self.combat_factory(
+            allies, enemies, rng=self.rng,
+            act=config.ACT, scale_enemies=config.SCALE_ENEMIES)
         # There are people here to ask, so cards that offer a choice wait for
         # an answer instead of picking for themselves.
         self.combat.ask_players = True

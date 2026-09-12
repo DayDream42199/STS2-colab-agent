@@ -17,8 +17,6 @@ class Blaze(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         # Permanent Strength, unlike Coordinate's this-turn version.
         return [Strength(
             source=context.source, target=context.target, amount=self.STRENGTH)]

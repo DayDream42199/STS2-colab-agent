@@ -101,7 +101,9 @@ class Resolver:
         # here on. Handed a ref, the copies inherit its state - Anger+ adds
         # Anger+.
         added = [new_ref(effect.card_id) for _ in range(effect.amount)]
-        if effect.pile == InstantAddCard.DRAW and effect.rng is not None:
+        if effect.pile == InstantAddCard.DRAW and effect.bottom:
+            pile[0:0] = added            # drawn from the end, so index 0 is the bottom
+        elif effect.pile == InstantAddCard.DRAW and effect.rng is not None:
             # Each copy lands at its own random depth. Shuffling the whole pile
             # instead would also undo any order the player set up - Headbutt
             # puts a card on top, and that has to stay on top.
@@ -343,7 +345,9 @@ class Resolver:
     @staticmethod
     def _resolve_instant_block(effect):
         target = effect.target
-        amount = effect.amount
+        # Co-op scaling for an enemy's own Block, before Dexterity and the
+        # multipliers, as in the reference. Allies have no block_scale.
+        amount = effect.amount * getattr(target, "block_scale", 1.0)
         for status in Resolver._ordered(target):
             amount = status.modify_block_gained(amount)
         amount = max(0, int(amount))

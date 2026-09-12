@@ -10,6 +10,7 @@ from ..Cards._card_enums import CardType, TargetType
 from ..Cards._card_ref import new_ref, take
 from ..Effects.InstantEffects.instant_damage import InstantDamage
 from ..Effects.InstantEffects.instant_move_card import InstantMoveCard
+from ..Units.Enemies._scripted import hp_scale, block_scale
 from ..Effects.InstantEffects.instant_play_card import InstantPlayCard
 
 
@@ -50,10 +51,14 @@ class Combat:
         GameEvent.HP_LOST: "hp_lost_events",
     }
 
-    def __init__(self, allies, enemies, rng=None):
+    def __init__(self, allies, enemies, rng=None, act="act1", scale_enemies=True):
         self.allies = list(allies)
         self.enemies = list(enemies)
         self.rng = rng if rng is not None else random.Random()
+        # Co-op scaling: enemy HP is multiplied by player count and an act
+        # factor, as in STS2. Off for a test that wants the printed numbers.
+        self.act = act
+        self.scale_enemies = scale_enemies
 
         self.phase = CombatPhase.NOT_STARTED
         self.result = None
@@ -77,6 +82,15 @@ class Combat:
     # --- lifecycle -------------------------------------------------------
 
     def start(self):
+        if self.scale_enemies:
+            players = len(self.allies)
+            mult = hp_scale(players, self.act)
+            for enemy in self.enemies:
+                if mult != 1.0:
+                    enemy.max_hp = max(1, round(enemy.max_hp * mult))
+                    enemy.current_hp = enemy.max_hp
+                enemy.block_scale = block_scale(players, self.act)
+
         for ally in self.allies:
             self._build_draw_pile(ally)
             self._turn_draw(ally)
@@ -360,6 +374,10 @@ class Combat:
         if not living:
             return False, None
         others = [a for a in living if a is not ally]
+        if target_type is TargetType.ALLY and not others:
+            # "Another player", and there is nobody: Havoc turning up
+            # Coordinate in a solo fight has nothing to aim it at.
+            return False, None
         return True, self.rng.choice(others or living)
 
     def end_player_turn(self):
@@ -640,7 +658,13 @@ class Combat:
             return self._validated_target(card, target, self.enemies, "enemy")
 
         if target_type == TargetType.ALLY:
-            return self._validated_target(card, target, self.allies, "ally")
+            target = self._validated_target(card, target, self.allies, "ally")
+            # Every ALLY-target card says "another player". Refused here, before
+            # the cost is paid - a card that refused from inside get_effects
+            # had already left the hand and taken the energy with it.
+            if target is ally:
+                raise ValueError(f"{card.name} must target another player.")
+            return target
 
         if target_type in (TargetType.ALL_ENEMIES, TargetType.ALL_ALLIES):
             return None
@@ -683,7 +707,6 @@ class Combat:
         return self.rng.choice(living)
 
     def _run_enemy_turn(self):
-        fallback_target = self._first_alive_ally()
         for enemy in self.enemies:
             if not enemy.is_alive():
                 continue
@@ -694,7 +717,7 @@ class Combat:
                 stun.amount -= 1
                 continue
             enemy.clear_block()
-            context = self._context_for(enemy, target=fallback_target)
+            context = self._context_for(enemy, target=self._enemy_target(enemy))
             for effect in enemy.get_effects(context):
                 self._intercept(effect)
                 self._resolve(effect)
@@ -720,6 +743,19 @@ class Combat:
             if covering is not None and covering.amount > 0:
                 effect.target = ally
                 return
+
+    def _enemy_target(self, enemy):
+        """Who this enemy's turn is aimed at.
+
+        A scripted enemy names its victim when it chooses its intent, so the
+        client can show it; that pick stands if the ally is still alive.
+        Otherwise - a dead target, or an enemy that names nobody - the first
+        living ally, as before."""
+        intent = enemy.intent if isinstance(enemy.intent, dict) else {}
+        named = self.find_unit(intent.get("target"))
+        if named is not None and named in self.allies and named.is_alive():
+            return named
+        return self._first_alive_ally()
 
     def _first_alive_ally(self):
         for ally in self.allies:

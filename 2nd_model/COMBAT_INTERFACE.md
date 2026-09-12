@@ -17,7 +17,7 @@ this. The surface has not changed since it was first written.
 
 | Call | Expectation |
 |---|---|
-| `Combat(allies, enemies, rng=rng)` | Constructor. `allies` and `enemies` arrive already built. `rng` is a seeded `random.Random` — use it for every shuffle and random choice so runs stay reproducible. |
+| `Combat(allies, enemies, rng=rng, act="act1", scale_enemies=True)` | Constructor. `allies` and `enemies` arrive already built. `rng` is a seeded `random.Random` — use it for every shuffle and random choice so runs stay reproducible. `act` and `scale_enemies` drive co-op HP scaling (below); both come from `config.py`. |
 | `.start()` | Set up draw piles, deal opening hands, choose first intents. |
 | `.is_over()` | `bool`. |
 | `.phase.name` | Enum-like. Session only tests `== "PLAYER_TURN"`. |
@@ -35,6 +35,14 @@ Session catches `ValueError`, `IndexError`, `KeyError` and `RuntimeError` from
 `play_card` and `end_player_turn`, and returns the message privately to the
 player who sent it. Raising with a readable message is the way to reject an
 illegal play — no result code needed.
+
+A refusal has to leave the fight exactly as it was. Every check — hand
+rules, cost, target (an `ALLY`-target card aimed at yourself is refused with
+"must target another player", as every such card says) — runs before the
+energy is spent and the card leaves the hand. A card must not raise from
+inside `get_effects`: by then it has been paid for and popped, so the player
+would lose the card and the energy and see only an error. `tests/card_matrix.py`
+checks this for every card.
 
 ## Three constraints that come from the wire, not from taste
 
@@ -212,19 +220,63 @@ game itself:
   damage is an Attack, Curious is a Power, the rest are Skills. Choking, like
   StS1's Choke, does not trigger on the card that applied it.
 
+## How an enemy works
+
+`Units/Enemies/_scripted.py` gives an enemy a move list and one rule:
+
+```python
+class TheInsatiable(ScriptedEnemy):
+    DEFAULT_MAX_HP = 321          # single-player; Combat scales it for co-op
+
+    def __init__(self, ...):
+        thrash = Move("Thrash", Move.ATTACK, lambda e, c: e._thrash(c),
+                      damage=8, hits=2)
+        ...
+        self._cycle = (thrash, lunge, salivate, thrash)
+
+    def pick_move(self, turn):
+        return self._opener if turn == 0 else self._cycle[(turn - 1) % 4]
+```
+
+A `Move` is a name, a kind (`attack` / `block` / `buff` / `debuff`), a function
+building its effects, and the per-hit `damage` and `hits` the client shows.
+`ScriptedEnemy.choose_intent` picks the move and — for an Attack — **names its
+target then**, so the intent the players see says who is about to be hit. That
+pick stands if the ally is still alive when the turn comes (`_enemy_target`);
+otherwise the first living ally takes it. Intercept redirects after that.
+
+**Co-op scaling** is real STS2, applied in `Combat.start()`; one player is
+never scaled. HP: × player count × act factor (act1 1.1, act2 1.2, act3 1.2,
+act3boss 1.3) — The Insatiable is 321 alone, 770 for two in act 2. Block an
+enemy gains: flat × 2 for two players, × players × act factor beyond; the
+resolver applies `enemy.block_scale` before Dexterity, as the reference does.
+Aeonglass's Ebb blocks 33 alone and 66 for two. One nuance: the reference
+`round()`s the scaled Block and we `int()` it, which can differ by 1 only at
+three or more players.
+
+A `Move` can be `targeted=True` without being an Attack — Aeonglass's
+Intensity is a debuff that still names one player.
+
+`Dummy1` predates this and still hits every ally at once; it is a test target,
+not a model.
+
 ## Cards that enemies hand out
 
 Every status card an enemy or boss in the reference gives the player is
 ported. Two need the enemy to pass per-copy state, which `CardRef` carries:
 
-- **The Insatiable** — Liquify Ground applies `Sandpit(4)` and puts 6
-  `frantic_escape` into the deck: 3 on top of the draw pile, 3 in the discard.
-  Sandpit counts down at each of the owner's `TURN_START`s and kills at 0;
-  playing Frantic Escape adds 1 and raises that copy's cost by 1 for the
-  combat. `test_fork.py`'s `liquify()` is the exact shape to produce.
-- **Aeonglass** — Intensity hands out Wither+X, where X is how many times it
-  has intensified. That is `CardRef("wither", bonus_damage=X)`: the card reads
-  `AMOUNT + bonus_damage`, so nothing else is needed.
+- **The Insatiable** (ported: `Units/Enemies/the_insatiable.py`) — Liquify
+  Ground applies `Sandpit(4)` and puts 6 `frantic_escape` into the deck: 3 at
+  the **bottom** of the draw pile, 3 in the discard. Sandpit counts down at each
+  of the owner's `TURN_START`s and kills at 0 - the fight is lethal on turn 5
+  unless escapes are found and played; each adds 1 and raises that copy's cost
+  by 1 for the combat.
+- **Aeonglass** (ported: `Units/Enemies/aeonglass.py`) — Increasing Intensity
+  hands one player Wither+X and takes 2+X Strength, where X is how many times
+  it has intensified. The card is `CardRef("wither", bonus_damage=X)` and
+  reads `AMOUNT + bonus_damage`, so it deals 3, 4, 5... The client sees only
+  `"wither"` in hand; the bonus is not on the wire yet (see the `hand_cards`
+  note above).
 
 Self-inflicted status damage (Burn, Toxic, Wither, Infection, Decay,
 Disintegration) is `is_attack=False`, as in the reference: it meets Block but

@@ -1,5 +1,7 @@
 from ..Units.Allies.test_ally_1 import TestAlly1
 from ..Units.Enemies.dummy_1 import Dummy1
+from ..Units.Enemies.the_insatiable import TheInsatiable
+from ..Units.Enemies.aeonglass import Aeonglass
 
 _ALLY_CLASSES = {}
 _ENEMY_CLASSES = {}
@@ -39,3 +41,5 @@ def known_enemy_type_ids():
 
 register_ally(TestAlly1)
 register_enemy(Dummy1)
+register_enemy(TheInsatiable)
+register_enemy(Aeonglass)

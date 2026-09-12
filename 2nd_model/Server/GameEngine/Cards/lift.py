@@ -18,7 +18,5 @@ class Lift(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         return [InstantBlock(
             source=context.source, target=context.target, amount=self.BLOCK)]

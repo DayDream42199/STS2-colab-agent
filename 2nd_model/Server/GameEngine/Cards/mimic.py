@@ -18,8 +18,6 @@ class Mimic(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         # Block is read off the ally at play time, so it mirrors whatever they
         # are holding right now rather than a fixed number.
         return [InstantBlock(

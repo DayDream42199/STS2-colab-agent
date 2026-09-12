@@ -17,8 +17,6 @@ class Coordinate(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         # Co-op card: the Strength goes to the chosen ally, not to the caster.
         return [StrengthThisTurn(
             source=context.source, target=context.target, amount=self.STRENGTH)]

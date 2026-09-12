@@ -21,8 +21,6 @@ class DemonicShield(Card):
         )
 
     def get_effects(self, context):
-        if context.target is context.source:
-            raise ValueError(f"{self.name} must target another player.")
         return [
             InstantHpLoss(
                 source=context.source, target=context.source, amount=self.HP_LOSS),
