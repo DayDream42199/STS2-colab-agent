@@ -24,5 +24,5 @@ class Rage(StatusEffect):
         card = context.payload.get("card")
         if card is None or card.card_type is not CardType.ATTACK:
             return None
-        return [InstantBlock(
+        return [InstantBlock(powered=False, card=False, 
             source=context.source, target=context.source, amount=self.amount)]

@@ -6,7 +6,10 @@ class Tank(StatusEffect):
     separate Protected status the card hands out, because a status can only
     modify damage aimed at the unit carrying it."""
 
-    EXTRA = 0.5
+    # Double, not +50%: the game's TankPower returns 2x. Attacks only - a
+    # Burn in hand hurts the tank no more than anyone else.
+    MULTIPLIER = 2
+    ATTACKS_ONLY = True
     DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE
 
     def __init__(self, source, target, amount):
@@ -19,4 +22,4 @@ class Tank(StatusEffect):
         pass  # a power lasts the whole combat
 
     def modify_incoming_damage(self, amount, attacker=None):
-        return amount * (1 + self.EXTRA)
+        return amount * self.MULTIPLIER

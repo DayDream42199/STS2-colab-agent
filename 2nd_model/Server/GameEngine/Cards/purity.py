@@ -22,7 +22,8 @@ class Purity(Card):
     def get_effects(self, context):
         # "Up to 3" is asked one card at a time: each answer queues the next
         # question over what is left, so nothing can be picked twice. Purity
-        # itself has already left the hand, so it cannot pick itself.
+        # itself has already left the hand, so it cannot pick itself. Every
+        # question can be stopped - the game allows 0 to 3.
         ally = context.source
 
         def ask(left):
@@ -35,7 +36,7 @@ class Purity(Card):
                     source=ally, target=ally, card_ids=[chosen])]
 
             context.ask(ally, f"Exhaust a card ({left} left)",
-                        lambda: list(ally.hand), exhaust)
+                        lambda: list(ally.hand), exhaust, can_stop=True)
 
         ask(self.COUNT)
         return []

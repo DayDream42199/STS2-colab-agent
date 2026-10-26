@@ -18,6 +18,13 @@ class Fisticuffs(Card):
             target_type = TargetType.ENEMY
         )
 
+    def base_block(self, ally):
+        # The damage it deals, as far as it is known before a target is
+        # chosen: after this player's Strength and Weak. The target's
+        # Vulnerable can only add to it, once there is one.
+        from ..Resolution.resolver import Resolver
+        return Resolver.damage_amount(ally, None, self.base_damage(ally))
+
     def get_effects(self, context):
         return [InstantDamage(
             source=context.source, target=context.target, amount=self.DAMAGE)]

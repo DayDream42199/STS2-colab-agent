@@ -106,7 +106,7 @@ class MadScienceWisdom(MadScience):
         me = context.source
         return [
             InstantBlock(source=me, target=me, amount=self.BLOCK),
-            InstantDraw(source=me, target=me, amount=self.CARDS, rng=context.rng),
+            InstantDraw(source=me, target=me, amount=self.CARDS, rng=context.rngs.shuffle),
         ]
 
 
@@ -121,7 +121,7 @@ class MadScienceChaos(MadScience):
         effects = [InstantBlock(source=me, target=me, amount=self.BLOCK)]
         pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
         if pool:
-            picked = context.rng.choice(pool)
+            picked = context.rngs.card_generation.choice(pool)
             me.free_this_turn.append(picked)
             effects.append(InstantAddCard(
                 source=me, target=me, card_id=picked, pile=InstantAddCard.HAND))

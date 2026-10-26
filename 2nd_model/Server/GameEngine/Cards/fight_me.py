@@ -16,7 +16,7 @@ class FightMe(Card):
             card_type = CardType.ATTACK,
             card_class = CardClass.IRONCLAD,
             rarity = CardRarity.UNCOMMON,
-            cost = 1,
+            cost = 2,
             target_type = TargetType.ENEMY
         )
 

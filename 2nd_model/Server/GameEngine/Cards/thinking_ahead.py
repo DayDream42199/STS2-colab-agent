@@ -23,7 +23,7 @@ class ThinkingAhead(Card):
     def get_effects(self, context):
         return [InstantDraw(
             source=context.source, target=context.source,
-            amount=self.CARDS, rng=context.rng)]
+            amount=self.CARDS, rng=context.rngs.shuffle)]
 
     def follow_up(self, result, context):
         # The question can only be put once the draw has happened, so it is

@@ -21,7 +21,7 @@ class Cinder(Card):
     def get_effects(self, context):
         # Picked here rather than in the resolver, so the card owns the choice.
         hand = list(context.source.hand)
-        picked = [context.rng.choice(hand)] if hand else []
+        picked = [context.rngs.card_selection.choice(hand)] if hand else []
         return [
             InstantDamage(
                 source=context.source, target=context.target, amount=self.DAMAGE),

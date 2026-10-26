@@ -21,4 +21,4 @@ class MasterOfStrategy(Card):
 
     def get_effects(self, context):
         return [InstantDraw(source=context.source, target=context.source,
-                            amount=self.CARDS, rng=context.rng)]
+                            amount=self.CARDS, rng=context.rngs.shuffle)]

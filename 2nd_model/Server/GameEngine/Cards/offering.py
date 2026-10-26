@@ -30,5 +30,5 @@ class Offering(Card):
             InstantEnergy(
                 source=context.source, target=context.source, amount=self.ENERGY),
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
         ]

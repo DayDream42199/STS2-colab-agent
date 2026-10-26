@@ -14,7 +14,7 @@ class Dominate(Card):
             name = "Dominate",
             card_type = CardType.SKILL,
             card_class = CardClass.IRONCLAD,
-            rarity = CardRarity.RARE,
+            rarity = CardRarity.UNCOMMON,
             cost = 1,
             target_type = TargetType.ENEMY,
             properties = CardProperties(exhaust=True)

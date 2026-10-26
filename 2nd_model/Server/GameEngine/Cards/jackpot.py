@@ -32,7 +32,7 @@ class Jackpot(Card):
         for _ in range(self.COUNT):
             if not pool:
                 break
-            picked = context.rng.choice(pool)
+            picked = context.rngs.card_generation.choice(pool)
             context.source.free_this_turn.append(picked)
             effects.append(InstantAddCard(
                 source=context.source, target=context.source,

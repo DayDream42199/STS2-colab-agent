@@ -11,6 +11,8 @@ class Dexterity(StatusEffect):
         self.target = target
         self.amount = amount
 
+    BLOCK_POWERED_ONLY = True       # not on Entrench's doubling, as in the game
+
     def modify_block_gained(self, amount):
         return amount + self.amount
 

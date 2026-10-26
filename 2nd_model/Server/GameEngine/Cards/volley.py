@@ -25,6 +25,6 @@ class Volley(Card):
             if not living:
                 break
             effects.append(InstantDamage(
-                source=context.source, target=context.rng.choice(living),
+                source=context.source, target=context.rngs.targets.choice(living),
                 amount=self.DAMAGE))
         return effects

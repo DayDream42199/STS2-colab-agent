@@ -1,4 +1,5 @@
 from ._card import Card
+from ._card_ref import CardRef
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.InstantEffects.instant_add_card import InstantAddCard
 from ..Effects.InstantEffects.instant_exhaust import InstantExhaust
@@ -20,7 +21,6 @@ class Stoke(Card):
         # Imported here, not at module level: the registry imports
         # this card, so importing it back at import time would deadlock.
         from ..Registry.card_registry import generatable_card_ids
-
         # Stoke has already left the hand, so "your Hand" is what remains.
         hand = list(context.source.hand)
         pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
@@ -29,10 +29,12 @@ class Stoke(Card):
         effects = [InstantExhaust(
             source=context.source, target=context.source, card_ids=hand)]
         # One roll per exhausted card, so the replacements can repeat.
+        # Upgraded, every replacement arrives upgraded.
         effects.extend(
             InstantAddCard(
                 source=context.source, target=context.source,
-                card_id=context.rng.choice(pool), pile=InstantAddCard.HAND)
+                card_id=CardRef(context.rngs.card_generation.choice(pool), upgraded=self.upgraded),
+                pile=InstantAddCard.HAND)
             for _ in hand
         )
         return effects

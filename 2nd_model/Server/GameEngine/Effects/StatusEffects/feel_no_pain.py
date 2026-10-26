@@ -20,5 +20,5 @@ class FeelNoPain(StatusEffect):
             return None
         if context.target is not context.source:
             return None
-        return [InstantBlock(
+        return [InstantBlock(powered=False, card=False, 
             source=context.source, target=context.source, amount=self.amount)]

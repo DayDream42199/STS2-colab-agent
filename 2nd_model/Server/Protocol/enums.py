@@ -5,6 +5,9 @@ class ClientMessage(Enum):
     END_TURN = "end_turn"
     REQUEST_STATE = "request_state"
     CHOOSE = "choose"
+    # {"role": "agent"}: what this client is, for the plugin to format by.
+    # A human client never needs to send it; without a plugin it changes nothing.
+    IDENTIFY = "identify"
 
 class ServerMessage(Enum):
     WELCOME = "welcome"

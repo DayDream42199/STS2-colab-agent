@@ -21,7 +21,7 @@ class AssassinRaider(ScriptedEnemy):
 
 
 class AxeRaider(ScriptedEnemy):
-    """Swing (5, and 5 Block for itself), Big Swing (12), alternating."""
+    """Swing (5, and 5 Block), Swing again, then Big Swing (12)."""
 
     NAME = "Axe Raider"
     HP_RANGE = (20, 22)
@@ -32,33 +32,33 @@ class AxeRaider(ScriptedEnemy):
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
         super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        self._cycle = (attack("Swing", self.SWING, block=self.SWING_BLOCK),
-                       attack("Big Swing", self.BIG_SWING))
+        swing = attack("Swing", self.SWING, block=self.SWING_BLOCK)
+        self._cycle = (swing, swing, attack("Big Swing", self.BIG_SWING))
 
     def pick_move(self, turn):
         return self._cycle[turn % len(self._cycle)]
 
 
 class BruteRaider(ScriptedEnemy):
-    """Beat (7), Clap (+3 Strength), alternating."""
+    """Beat (7), Roar (+3 Strength), alternating."""
 
     NAME = "Brute Raider"
     HP_RANGE = (30, 33)
 
     BEAT = 7
-    CLAP = 3
+    ROAR = 3
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
         super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        self._cycle = (attack("Beat", self.BEAT), buff("Clap", Strength, self.CLAP))
+        self._cycle = (attack("Beat", self.BEAT), buff("Roar", Strength, self.ROAR))
 
     def pick_move(self, turn):
         return self._cycle[turn % len(self._cycle)]
 
 
 class TrackerRaider(ScriptedEnemy):
-    """Track (2 Frail on one player), Unleash the Hounds (1 x 8), alternating.
-    Eight small bites: every point of Strength it ever gains counts eight
+    """Track (2 Frail on every player) once, then Unleash the Hounds (1 x 8)
+    every turn after. Eight small bites: every point of Strength counts eight
     times, and Block soaks them one at a time."""
 
     NAME = "Tracker Raider"
@@ -70,11 +70,11 @@ class TrackerRaider(ScriptedEnemy):
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
         super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        self._cycle = (debuff("Track", Frail, self.FRAIL),
-                       attack("Unleash the Hounds", self.HOUND, hits=self.HOUNDS))
+        self._track = debuff("Track", Frail, self.FRAIL)
+        self._hounds = attack("Unleash the Hounds", self.HOUND, hits=self.HOUNDS)
 
     def pick_move(self, turn):
-        return self._cycle[turn % len(self._cycle)]
+        return self._track if turn == 0 else self._hounds
 
 
 class CrossbowRaider(ScriptedEnemy):

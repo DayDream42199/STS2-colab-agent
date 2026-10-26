@@ -1,4 +1,4 @@
-from ._scripted import ScriptedEnemy, Move
+from ._scripted import ScriptedEnemy, Move, players
 from ...Effects.InstantEffects.instant_damage import InstantDamage
 from ...Effects.StatusEffects.strength import Strength
 
@@ -14,9 +14,8 @@ class SnappingJaxfruit(ScriptedEnemy):
     STRENGTH = 2
 
     def _energy_orb(self, context):
-        effects = []
-        if context.target is not None:
-            effects.append(InstantDamage(source=self, target=context.target, amount=self.ORB))
+        effects = [InstantDamage(source=self, target=p, amount=self.ORB)
+                   for p in players(context)]
         effects.append(Strength(source=self, target=self, amount=self.STRENGTH))
         return effects
 

@@ -13,7 +13,7 @@ class Inferno(Card):
             card_type = CardType.POWER,
             card_class = CardClass.IRONCLAD,
             rarity = CardRarity.UNCOMMON,
-            cost = 2,
+            cost = 1,
             target_type = TargetType.SELF
         )
 

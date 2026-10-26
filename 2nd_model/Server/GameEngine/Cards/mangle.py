@@ -5,7 +5,7 @@ from ..Effects.StatusEffects.strength_loss_this_turn import StrengthLossThisTurn
 
 
 class Mangle(Card):
-    DAMAGE = 20
+    DAMAGE = 15
     STRENGTH_LOSS = 10
 
     def __init__(self):

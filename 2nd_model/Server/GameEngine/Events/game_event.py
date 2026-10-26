@@ -15,3 +15,5 @@ class GameEvent(Enum):
     ATTACKED = auto()        # payload: amount, attacker
     STATUS_APPLIED = auto()  # payload: effect_id
     DECK_SHUFFLED = auto()   # payload: -   the discard pile became the draw pile
+    ENEMY_TURN_START = auto()  # payload: -   no subject; the enemies are about to act
+    ENEMY_TURN_END = auto()    # payload: -   no subject; the enemies have all acted

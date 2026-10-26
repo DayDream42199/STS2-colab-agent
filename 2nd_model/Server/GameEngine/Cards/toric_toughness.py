@@ -20,9 +20,14 @@ class ToricToughness(Card):
         )
 
     def get_effects(self, context):
-        return [
-            InstantBlock(
-                source=context.source, target=context.source, amount=self.BLOCK),
-            DelayedBlock(
-                source=context.source, target=context.source, amount=self.TURNS),
-        ]
+        return [InstantBlock(
+            source=context.source, target=context.source, amount=self.BLOCK)]
+
+    def follow_up(self, result, context):
+        # Once the Block is gained, the next turns get that same amount - what
+        # was really gained, after Dexterity and Frail - as the game's
+        # ToricToughnessPower.SetBlock(blockAmount) does.
+        if result["effect_id"] != "instant_block" or result["target_id"] != context.source.unit_id:
+            return None
+        return [DelayedBlock(source=context.source, target=context.source,
+                             amount=self.TURNS, block=result["amount"])]

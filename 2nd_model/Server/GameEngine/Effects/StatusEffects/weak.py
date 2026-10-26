@@ -6,6 +6,7 @@ class Weak(StatusEffect):
     of the exchange."""
 
     IS_DEBUFF = True
+    TICKS_AFTER_ENEMY_TURN = True
 
     MULTIPLIER = 0.75
     DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE

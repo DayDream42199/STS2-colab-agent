@@ -29,6 +29,7 @@ class Headbutt(Card):
 
             context.ask(ally, "Put a card from your Discard Pile on top of "
                               "your Draw Pile",
-                        lambda: list(ally.discard_pile), stash)
+                        lambda: [c for c in ally.discard_pile if c is not context.played],
+                        stash)
         return [InstantDamage(
             source=ally, target=context.target, amount=self.DAMAGE)]

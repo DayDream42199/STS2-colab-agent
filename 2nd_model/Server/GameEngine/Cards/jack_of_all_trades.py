@@ -30,6 +30,6 @@ class JackOfAllTrades(Card):
         return [
             InstantAddCard(
                 source=context.source, target=context.source,
-                card_id=context.rng.choice(pool), pile=InstantAddCard.HAND)
+                card_id=context.rngs.card_generation.choice(pool), pile=InstantAddCard.HAND)
             for _ in range(self.COUNT)
         ]

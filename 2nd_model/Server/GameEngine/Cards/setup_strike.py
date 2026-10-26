@@ -5,7 +5,7 @@ from ..Effects.StatusEffects.strength_this_turn import StrengthThisTurn
 
 class SetupStrike(Card):
     DAMAGE = 7
-    STRENGTH = 3
+    STRENGTH = 2
 
     def __init__(self):
         super().__init__(

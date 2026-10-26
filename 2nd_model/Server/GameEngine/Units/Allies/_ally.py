@@ -6,8 +6,9 @@ from ...Cards._card_ref import is_upgraded, replay_of
 class Ally(Unit, ABC):
     DEFAULT_MAX_ENERGY = 3
     DEFAULT_DECK = []
-    # Drawing stops here. Cards added straight to hand (Stoke, Jackpot) are not
-    # capped - only drawing is, which is what "your Hand is full" means.
+    # The most a hand holds. Drawing stops here, and a card added or moved into
+    # a full hand (Jackpot, Wish, Bolas coming back) goes to the discard pile
+    # instead - the game's CardPileCmd.Add. The resolver does that part.
     HAND_LIMIT = 10
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, max_energy=None, deck=None, rng=None):
@@ -30,11 +31,6 @@ class Ally(Unit, ABC):
         # one made free, either may be the free one.
         self.free_this_turn = []
         self.free_this_combat = []
-        # One-Two Punch: this many of your next Attacks are played twice.
-        self.extra_attack_plays = 0
-        # Unrelenting: this many of your next Attacks cost 0. Not cleared each
-        # turn - the card says "the next Attack you play", with no deadline.
-        self.free_next_attack = 0
         # Reshuffles this draw did. An Ally has no Combat to emit with, so it
         # counts them and Combat announces them (Stratagem).
         self.shuffles_pending = 0
@@ -42,7 +38,6 @@ class Ally(Unit, ABC):
     def start_turn(self):
         self.retain_hand = False
         self.free_this_turn = []
-        self.extra_attack_plays = 0
         self.clear_block()
         self.energy = self.max_energy
 
@@ -51,16 +46,24 @@ class Ally(Unit, ABC):
         for _ in range(count):
             if len(self.hand) >= self.HAND_LIMIT:
                 break
-            if not self.draw_pile:
-                if not self.discard_pile:
-                    break
-                self.draw_pile, self.discard_pile = self.discard_pile, []
-                rng.shuffle(self.draw_pile)
-                self.shuffles_pending += 1
+            if not self.reshuffle_if_empty(rng):
+                break
             card_id = self.draw_pile.pop()
             self.hand.append(card_id)
             drawn.append(card_id)
         return drawn
+
+    def reshuffle_if_empty(self, rng):
+        """An empty draw pile takes the discard pile, shuffled. False if both
+        are empty. Drawing does this, and so does playing off the top (Havoc)."""
+        if self.draw_pile:
+            return True
+        if not self.discard_pile:
+            return False
+        self.draw_pile, self.discard_pile = self.discard_pile, []
+        rng.shuffle(self.draw_pile)
+        self.shuffles_pending += 1
+        return True
 
     def gain_energy(self, amount):
         if amount > 0:

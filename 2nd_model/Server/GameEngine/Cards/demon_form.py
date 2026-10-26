@@ -4,7 +4,7 @@ from ..Effects.StatusEffects.demon_form import DemonForm as DemonFormStatus
 
 
 class DemonForm(Card):
-    AMOUNT = 3
+    AMOUNT = 2
 
     def __init__(self):
         super().__init__(

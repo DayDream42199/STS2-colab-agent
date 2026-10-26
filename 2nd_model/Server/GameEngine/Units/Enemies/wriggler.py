@@ -3,9 +3,10 @@ from ...Effects.StatusEffects.strength import Strength
 
 
 class Wriggler(ScriptedEnemy):
-    """Act 1. Wriggle hands one player an Infection and takes 2 Strength for
-    itself; Nasty Bite follows, and so on. Phrog Parasite spawns four of these
-    at once, which is when the Strength starts to matter."""
+    """Act 1. Wriggle (an Infection to every player, +2 Strength) and Nasty
+    Bite (6), alternating. Which comes first depends on the slot, as in the
+    game: the 1st and 3rd Wriggler of a group bite first, the 2nd and 4th
+    wriggle first. Phrog Parasite's four arrive stunned."""
 
     HP_RANGE = (17, 21)
 
@@ -19,8 +20,11 @@ class Wriggler(ScriptedEnemy):
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
         super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        wriggle = Move("Wriggle", Move.DEBUFF, lambda e, c: e._wriggle(c), targeted=True)
-        self._cycle = (wriggle, attack("Nasty Bite", self.NASTY_BITE))
+        self._bite = attack("Nasty Bite", self.NASTY_BITE)
+        self._wriggle_move = Move("Wriggle", Move.DEBUFF, lambda e, c: e._wriggle(c))
 
     def pick_move(self, turn):
-        return self._cycle[turn % len(self._cycle)]
+        if not self.history:
+            first_bites = self.same_kind_index(self.context) % 2 == 0
+            return self._bite if first_bites else self._wriggle_move
+        return self._wriggle_move if self.history[-1] is self._bite else self._bite

@@ -20,6 +20,10 @@ class FiendFire(Card):
             properties = CardProperties(exhaust=True)
         )
 
+    def base_damage(self, ally):
+        # Per hit; the number of hits is the rest of the hand.
+        return self.DAMAGE_PER_CARD
+
     def get_effects(self, context):
         # This card is already out of hand by the time effects resolve, so it
         # never burns itself.
@@ -28,7 +32,7 @@ class FiendFire(Card):
             source=context.source, target=context.source, card_ids=doomed)]
         effects.extend(
             InstantDamage(source=context.source, target=context.target,
-                          amount=self.DAMAGE_PER_CARD)
+                          amount=self.base_damage(context.source))
             for _ in range(len(doomed))
         )
         return effects

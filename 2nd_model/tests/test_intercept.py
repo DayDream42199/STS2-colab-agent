@@ -3,6 +3,7 @@ import random, sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Server"))
 
+from GameEngine.Cards._card_ref import CardRef
 from GameEngine.Combat.combat import Combat
 from GameEngine.Registry.unit_registry import create_ally, create_enemy
 from GameEngine.Registry.card_registry import create_card, known_card_ids
@@ -11,6 +12,12 @@ bad = []
 def check(l, c, d=""):
     if not c: bad.append(l)
     print("[%s] %s%s" % ("PASS" if c else "FAIL", l, (" -> " + str(d)) if d else ""))
+
+def charges(unit, effect_id):
+    """What a counter status has left - 0 once it is gone."""
+    status = unit.get_status(effect_id)
+    return status.amount if status is not None else 0
+
 
 def fight(n_allies=1, n_enemies=1, seed=1, enemy_hp=200):
     allies = [create_ally("testally1", "p%d" % (i+1), rng=random.Random(seed))
@@ -34,7 +41,7 @@ def always_attack(enemies):
             e, "intent", {"type": "attack", "amount": 1})
         e.choose_intent()
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- Havoc -----------------------------------------------------------------
 c, a, es = fight(seed=2)
@@ -69,15 +76,23 @@ play(c, a[0], "havoc")
 check("Havoc still exhausts when there is nothing to hit",
       a[0].exhaust_pile == ["strike"], a[0].exhaust_pile)
 
-# --- auto-target picks the weakest enemy -----------------------------------
-c, a, es = fight(n_enemies=3, seed=3)
-es[0].current_hp = 100
-es[1].current_hp = 20
-es[2].current_hp = 60
-a[0].draw_pile = ["strike"]
-play(c, a[0], "havoc")
-check("an auto-played attack takes the weakest enemy",
-      [e.current_hp for e in es] == [100, 14, 60], [e.current_hp for e in es])
+# --- auto-target picks a random living enemy -------------------------------
+# The game's CardCmd.AutoPlay: CombatTargets.NextItem(HittableEnemies). Not the
+# weakest - that was only ever seed 3 landing on it.
+hit_slots = set()
+for seed in range(12):
+    c, a, es = fight(n_enemies=3, seed=seed)
+    es[0].current_hp, es[1].current_hp, es[2].current_hp = 100, 0, 60
+    a[0].draw_pile = ["strike"]
+    play(c, a[0], "havoc")
+    hp = [e.current_hp for e in es]
+    hit = [i for i, (now, was) in enumerate(zip(hp, (100, 0, 60))) if now != was]
+    if hit != [0] and hit != [2] or hp[hit[0]] != (100, 0, 60)[hit[0]] - 6:
+        hit_slots.add("wrong: %s" % hp)
+    else:
+        hit_slots.add(hit[0])
+check("an auto-played attack hits one random living enemy, never the dead one",
+      hit_slots == {0, 2}, hit_slots)
 
 # --- Beat Down / Catastrophe -----------------------------------------------
 c, a, es = fight(seed=4)
@@ -153,11 +168,12 @@ check("Stampede with no Attack in hand is quiet", es[0].current_hp == hp,
 # --- One-Two Punch ---------------------------------------------------------
 c, a, es = fight(seed=8)
 play(c, a[0], "one_two_punch")
-check("One-Two Punch grants one extra play", a[0].extra_attack_plays == 1)
+check("One-Two Punch grants one extra play, as a status",
+      charges(a[0], "one_two_punch") == 1, a[0].statuses.keys())
 play(c, a[0], "strike", es[0])
 check("the next Attack is played twice", es[0].current_hp == 188,
       es[0].current_hp)
-check("the grant is spent", a[0].extra_attack_plays == 0)
+check("the grant is spent, and the status gone", a[0].get_status("one_two_punch") is None)
 check("a replayed card still reaches the discard once",
       a[0].discard_pile.count("strike") == 1, a[0].discard_pile)
 play(c, a[0], "strike", es[0])
@@ -167,13 +183,13 @@ check("the Attack after that is played once", es[0].current_hp == 182,
 c, a, es = fight(seed=8)
 play(c, a[0], "one_two_punch")
 play(c, a[0], "defend")
-check("One-Two Punch is not spent by a Skill", a[0].extra_attack_plays == 1)
+check("One-Two Punch is not spent by a Skill", charges(a[0], "one_two_punch") == 1)
 check("and the Skill is not doubled", a[0].block == 5, a[0].block)
 
 c, a, es = fight(seed=8)
 play(c, a[0], "one_two_punch")
 c.end_player_turn()
-check("One-Two Punch expires at end of turn", a[0].extra_attack_plays == 0)
+check("One-Two Punch expires at end of turn", a[0].get_status("one_two_punch") is None)
 
 # --- Tag Team --------------------------------------------------------------
 c, a, es = fight(n_allies=2, seed=9)
@@ -267,11 +283,11 @@ check("Juggling does not fire on the fourth", a[0].hand == [], a[0].hand)
 # --- Howl from Beyond ------------------------------------------------------
 c, a, es = fight(n_enemies=2, seed=14)
 play(c, a[0], "howl_from_beyond")
-check("Howl hits all enemies for 18", [e.current_hp for e in es] == [182, 182],
+check("Howl hits all enemies for 16", [e.current_hp for e in es] == [184, 184],
       [e.current_hp for e in es])
 c.end_player_turn()
 check("Howl does not echo from the discard pile",
-      [e.current_hp for e in es] == [182, 182], [e.current_hp for e in es])
+      [e.current_hp for e in es] == [184, 184], [e.current_hp for e in es])
 
 c, a, es = fight(n_enemies=2, seed=14)
 play(c, a[0], "howl_from_beyond")
@@ -279,7 +295,22 @@ a[0].discard_pile.remove("howl_from_beyond")
 a[0].exhaust_pile.append("howl_from_beyond")     # as Fiend Fire would
 c.end_player_turn()
 check("Howl echoes from the exhaust pile at end of turn",
-      [e.current_hp for e in es] == [164, 164], [e.current_hp for e in es])
+      [e.current_hp for e in es] == [168, 168], [e.current_hp for e in es])
+check("...and then goes to the discard pile, not back to the exhaust pile",
+      "howl_from_beyond" not in a[0].exhaust_pile
+      and "howl_from_beyond" in a[0].discard_pile + a[0].draw_pile + a[0].hand,
+      (a[0].exhaust_pile, a[0].discard_pile))
+a[0].hand = []
+c.end_player_turn()
+check("...so it does not echo again the turn after",
+      [e.current_hp for e in es] == [168, 168], [e.current_hp for e in es])
+
+c, a, es = fight(n_enemies=2, seed=14)
+a[0].exhaust_pile.append(CardRef("howl_from_beyond"))    # never played, just exhausted
+a[0].hand = []
+c.end_player_turn()
+check("a Howl that was exhausted without ever being played still echoes",
+      [e.current_hp for e in es] == [184, 184], [e.current_hp for e in es])
 
 # --- Void ------------------------------------------------------------------
 c, a, es = fight(seed=15)

@@ -18,10 +18,12 @@ class AshenStrike(Card):
             target_type = TargetType.ENEMY
         )
 
+    def base_damage(self, ally):
+        return self.DAMAGE + self.EXTRA_PER_EXHAUSTED * len(ally.exhaust_pile)
+
     def get_effects(self, context):
-        exhausted = len(context.source.exhaust_pile)
         return [InstantDamage(
             source=context.source,
             target=context.target,
-            amount=self.DAMAGE + self.EXTRA_PER_EXHAUSTED * exhausted,
+            amount=self.base_damage(context.source),
         )]

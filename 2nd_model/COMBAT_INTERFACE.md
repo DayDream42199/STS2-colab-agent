@@ -17,7 +17,7 @@ this. The surface has not changed since it was first written.
 
 | Call | Expectation |
 |---|---|
-| `Combat(allies, enemies, rng=rng, act="act1", scale_enemies=True)` | Constructor. `allies` and `enemies` arrive already built; 1 to `Combat.MAX_ALLIES` (4) players, or it raises `ValueError`. `rng` is a seeded `random.Random` — use it for every shuffle and random choice so runs stay reproducible. `act` and `scale_enemies` drive co-op HP scaling (below); both come from `config.py`. |
+| `Combat(allies, enemies, rng=rng, act="act1", scale_enemies=True)` | Constructor. `allies` and `enemies` arrive already built; 1 to `Combat.MAX_ALLIES` (4) players, or it raises `ValueError`. `rng` is the fight's random streams (`Context/rng_streams.py`, one per purpose, as the game's `RunRngSet`), or one seeded `random.Random` to seed them from; with none it draws a seed and keeps it in `.seed`. Draw from the stream that fits (below) so runs stay reproducible and one kind of randomness never moves another. `act` and `scale_enemies` drive co-op HP scaling (below); both come from `config.py`. |
 | `.start()` | Set up draw piles, deal opening hands, choose first intents. |
 | `.is_over()` | `bool`. |
 | `.phase.name` | Enum-like. Session only tests `== "PLAYER_TURN"`. |
@@ -26,15 +26,18 @@ this. The surface has not changed since it was first written.
 | `.play_card(ally, hand_index, target=None)` | Play it. Return a list of JSON-safe dicts describing what happened. |
 | `.end_player_turn()` | Run the enemy turn and begin the next player turn. Raises while a choice is unanswered. |
 | `.choice_for(ally)` | The question waiting on this player, or `None`. |
-| `.answer_choice(ally, option_index)` | Carry out the option they picked; returns result dicts like `play_card`. |
+| `.answer_choice(ally, option_index)` | Carry out the option they picked; returns result dicts like `play_card`. `PendingChoice.STOP` (-1) ends an "up to N" question with nothing picked, and is refused on any other. |
 | `.forfeit_choices(ally)` | A player left: answer what they were asked, and anything they are asked later, at random. Without this a fight would wait forever on them. |
 | `.ask_players` | Set True when there are players to ask; False (default) answers at random. |
+| `.legal_actions(ally)` | Every message this player may send now, as `{"type": "play_card", "hand_index", "target_id"}`, `{"type": "end_turn"}` and `{"type": "choose", "option_index"}` (-1 to stop). Listed is accepted, anything else refused - `tests/test_legal_actions.py` checks both. Also in each ally's state as `legal_actions`. |
 | `.to_dict()` | Full JSON-safe state. Broadcast verbatim after every action. |
 
 Session catches `ValueError`, `IndexError`, `KeyError` and `RuntimeError` from
 `play_card` and `end_player_turn`, and returns the message privately to the
 player who sent it. Raising with a readable message is the way to reject an
-illegal play — no result code needed.
+illegal play — no result code needed. Anything else that is raised is a bug:
+Session catches it too, prints and logs the traceback (an `error` line), tells
+the sender, sends everyone the state as it now stands, and carries on.
 
 A refusal has to leave the fight exactly as it was. Every check — hand
 rules, cost, target (an `ALLY`-target card aimed at yourself is refused with
@@ -59,9 +62,55 @@ express rides alongside in arrays the same length as `hand`: `hand_upgraded`
 (bools) and `hand_replay` (ints). Both are additive; a client that ignores them
 behaves exactly as before.
 
-If a third such field ever appears, these should collapse into one
-`hand_cards` array of objects rather than growing a fourth parallel array —
-your call, and cheap while only two clients read it.
+A third, `hand_cost`, is added by `Combat.to_dict()` (the ally alone cannot
+price a card): what each card costs to play right now, as the game prints it -
+a number after Stomp's discount, Tangled, Corruption, a Frantic Escape bump or
+a free grant; `"X"` for an X-cost card; `None` for one that cannot be played.
+`Combat.hand_costs(ally)` gives the same list to in-process code.
+
+A fourth, `hand_damage`, is one hit of each Attack as the game shows it before
+a target is chosen: after the holder's Strength, Weak and Vigor (Vigor is not
+spent by being shown), not the target's Vulnerable; `None` for anything that
+is not an Attack. It comes from `Card.base_damage(ally)` - the printed number,
+or, for the seven cards that work theirs out (Body Slam, Fiend Fire, Gold Axe,
+Mind Blast, Ashen Strike, Perfected Strike, Pact's End), the same method
+their `get_effects` reads, so the number shown and the hit cannot drift.
+What depends on the target (Bully, Rend, Gang Up) shows the base number.
+`Combat.hand_damages(ally)` gives it in-process; `tests/test_cost.py` plays
+every Attack four ways and checks the first hit against it.
+
+A fifth, `hand_text`, is what each card does, as the player reads it:
+"Deal 6 damage." on a Strike, "Deal 9 damage." on a Strike+. It comes from
+`Cards/_text.py`, one template per card written from what its code does
+here. The numbers are never typed in: `{DAMAGE}` is filled from the card's
+own constant after its upgrade (and its Rampage-style bonus), and keywords
+(Unplayable, Innate, Retain, Ethereal, Exhaust) from the copy's properties.
+In hand, an Attack's damage reads as the game shows a card in hand - after
+the holder's Strength, Weak and Vigor, the same number as `hand_damage` - and
+Body Slam, Mind Blast, Gold Axe, Ashen Strike and Perfected Strike add what
+they come to now ("Deal damage equal to your Block (now 7)."). Block works
+the same way from `Combat.hand_blocks(ally)`: the Block each card gives the
+player holding it, after Dexterity, Frail, Unmovable and Fasten (`None` for
+Lift, whose Block goes to a teammate, and Mimic, whose depends on the
+target). It is computed in-process and not sent as its own array; the hand
+text shows it, and Entrench, Stack, Second Wind, Evil Eye and Fisticuffs add
+"(now N)". Piles and question options show the printed numbers. The terminal client prints only
+the text, since `hand_damage` would say the same number twice.
+**A new card needs an entry there**; `tests/test_card_text.py` fails until it
+has one, and also fails if an upgrade changes a number the text leaves out.
+Question options carry the same, as `option_text` beside `options`.
+
+The piles go out already in that shape: `piles` holds `draw`, `discard` and
+`exhaust`, each a list of `{"id", "upgraded", "text"}` (`Combat.pile_view(ally)`).
+The draw pile is sorted as the game's pile screen sorts it - rarity, then id,
+Status and Curse last - so it never gives away which card comes next; discard
+and exhaust keep their order, newest last. The terminal client shows the
+counts on each player's line and the contents on `piles [player_id]`.
+
+With five, these really should collapse into one `hand_cards` array of
+objects, the shape the piles already use — your call. `hand_cost`,
+`hand_damage` and `hand_text` went in as arrays so that no client broke; the
+collapse would change the wire.
 
 **3. Unit ids are assigned by Session**, not by combat: allies are `p1`, `p2`, …
 and enemies `e1`, `e2`, …. The client targets by these strings, which is what
@@ -97,9 +146,13 @@ Register the class in `Registry/card_registry.py` and it exists.
 card picks the id itself and hands the resolver a list. That keeps `Resolver` a
 flat dispatch with no game knowledge in it.
 
-**`context`** carries `source`, `target`, `all_allies`, `all_enemies`, `rng`,
-and `payload`. Use `context.rng` — never module-level `random` — or seeded runs
-stop reproducing.
+**`context`** carries `source`, `target`, `all_allies`, `all_enemies`,
+`rngs`, `payload`, and for a card being played `played` (that copy) and
+`play_id` (that play). Draw from the stream the game uses -
+`context.rngs.card_generation` for a card made, `.card_selection` for a card
+picked at random, `.targets` for a random target, `.shuffle` for a draw (pass it
+as `rng=`) or a card put into the draw pile at random - never module-level
+`random`, or seeded runs stop reproducing. `context.rng` is the `niche` stream.
 
 **Two hooks answer "may this be played", and neither is `properties.playable`,**
 which is a fixed property of the printing. Both read the whole hand, and both
@@ -144,7 +197,7 @@ class DarkEmbrace(StatusEffect):
         if context.target is not context.source:
             return None
         return [InstantDraw(source=context.source, target=context.source,
-                            amount=self.amount, rng=context.rng)]
+                            amount=self.amount, rng=context.rngs.shuffle)]
 ```
 
 Return a list of effects, or `None` to ignore. Combat resolves what comes back,
@@ -194,17 +247,20 @@ Three consequences worth knowing:
   a permanent upgrade would be expressed.
 
 What an upgrade *changes* lives in one table, `Cards/_upgrades.py`, rather than
-in 223 card files. Cards read their numbers off their own constants, so
+in 219 card files. Cards read their numbers off their own constants, so
 `apply_upgrade` sets those constants on the instance and no card has to know.
-161 cards have an entry. For 6 (Cruelty, Knockdown, Outmaneuver, Panache,
-Relax, The Bomb) the upgraded number lives on a *status* rather than the card,
-so their upgrade is currently a no-op.
+For 5 (Knockdown, Outmaneuver, Panache, Relax, The Bomb) the upgraded number
+lives on a *status* rather than the card, so their upgrade is currently a
+no-op. A few upgrades change what a card does rather than a number - Cascade+
+plays X+1, Primal Force+ and Stoke+ make upgraded cards, True Grit+ lets you
+choose - and those read `self.upgraded` in `get_effects`.
 
 ## What is left, and what unlocks it
 
-14 of the 230 planned cards. `python Registry/coverage.py` prints the split:
-13 cannot exist in an Ironclad-only co-op run, and Alchemize needs a potion
-system, which was never in scope. A ninth Mad Science variant, Improvement
+18 of the 230 planned cards. `python Registry/coverage.py` prints the split:
+13 cannot exist in an Ironclad-only co-op run, 4 are no longer in the game
+(Blaze, Midnight, Outrage, Abundance), and Alchemize needs a potion system,
+which was never in scope. A ninth Mad Science variant, Improvement
 ("at the end of combat, Upgrade a random card"), is skipped as deck editing
 between fights. Nothing is unaccounted for.
 
@@ -224,98 +280,132 @@ game itself:
 
 ## How an enemy works
 
-`Units/Enemies/_scripted.py` gives an enemy a move list and one rule:
+Every enemy here is ported from the installed game's own code (v0.107.1,
+`MegaCrit.Sts2.Core.Models.Monsters`): HP, every number, the move pattern and
+what each move does. `tests/test_enemies.py` checks each against it.
+
+**Every move lands on every living player.** The game has no single-target
+enemy move: `MonsterModel.PerformMove` hands each move all the players, and an
+attack built with `FromMonster` targets all opponents. So Butt hits both
+players for 12, Roar puts 3 Vulnerable on both, Goop slimes both. An intent
+names nobody. Intercept is the one way to change who is hit: the interceptor
+takes every teammate's hit as well as their own.
+
+`Units/Enemies/_scripted.py` gives an enemy a move list and `pick_move(turn)`.
+A fixed pattern is a cycle; a random one uses `choose(branches)`, the game's
+RandomBranchState:
 
 ```python
-class TheInsatiable(ScriptedEnemy):
-    DEFAULT_MAX_HP = 321          # single-player; Combat scales it for co-op
-
+class Mawler(ScriptedEnemy):
     def __init__(self, ...):
-        thrash = Move("Thrash", Move.ATTACK, lambda e, c: e._thrash(c),
-                      damage=8, hits=2)
-        ...
-        self._cycle = (thrash, lunge, salivate, thrash)
+        self._claw = attack("Claw", 4, hits=2)
+        self._branches = (Branch(attack("Rip and Tear", 14), Branch.NO_REPEAT),
+                          Branch(debuff("Roar", Vulnerable, 3), Branch.ONCE),
+                          Branch(self._claw, Branch.NO_REPEAT))
 
     def pick_move(self, turn):
-        return self._opener if turn == 0 else self._cycle[(turn - 1) % 4]
+        return self._claw if turn == 0 else self.choose(self._branches)
 ```
 
-A `Move` is a name, a kind (`attack` / `block` / `buff` / `debuff`), a function
-building its effects, and the per-hit `damage` and `hits` the client shows.
-`ScriptedEnemy.choose_intent` picks the move and — for an Attack — **names its
-target then**, so the intent the players see says who is about to be hit. That
-pick stands if the ally is still alive when the turn comes (`_enemy_target`);
-otherwise the first living ally takes it. Intercept redirects after that.
+A `Branch` may be `NO_REPEAT` (never twice running), `ONCE` (once a fight), a
+number N (at most N running), or `FOREVER`, plus a `cooldown` (not while among
+the last c moves) and a `weight`. With every option ruled out the first branch
+is taken, as the game's loop does. Enemies choose from the fight's
+`monster_ai` stream (their HP rolls from `niche`), so what the players do -
+how often they reshuffle, what they make - never changes an enemy's next move.
+
+The helpers: `attack(name, damage, hits=, block=, inflict=, gain=)`,
+`buff(name, Status, n)`, `guard(name, block)`, `debuff(name, Status, n)` and
+`hand_out(card_id, n)` - all aimed at every player. `HP_RANGE = (32, 35)` rolls
+the range once per fight; `NAME` is what the client shows. `on_combat_start`
+returns what an enemy does as it arrives (Cubex's 13 Block and Artifact,
+Aeonglass's Withering Presence); `same_kind_index` is its encounter slot (two
+Nibbits: the front one Slices first, the back one Hisses first).
+
+**What the players see of an intent.** `type`, `name`, `amount` (per hit, as
+printed), `hits` and `block` (scaled for the party, what it will actually
+gain). `Combat.to_dict()` adds `damage`: for each living player, what one hit
+will do to them after the enemy's Strength and Weak and their Vulnerable - the
+number the game shows - worked out when the state is sent, so it moves as the
+turn goes. The terminal client shows its own player's number and neither the
+move's name nor a target, as the game does not.
 
 **Co-op scaling** is real STS2, applied in `Combat.start()`; one player is
 never scaled. HP: × player count × act factor (act1 1.1, act2 1.2, act3 1.2,
-act3boss 1.3) — The Insatiable is 321 alone, 770 for two in act 2. Block an
-enemy gains: flat × 2 for two players, × players × act factor beyond; the
-resolver applies `enemy.block_scale` before Dexterity, as the reference does.
-Aeonglass's Ebb blocks 33 alone, 66 for two, 109 for three (33 × 3.3 = 108.9,
-rounded as the reference does). Nothing else scales: an enemy's damage, the
-Strength it gains and the status cards it hands out are the same numbers for
-one player or four, and each move names one living player. `tests/test_scaling.py`
-runs every scripted enemy at 1–4 players in two acts and checks all of that
-turn by turn against the solo run.
+act3boss 1.3). Block an enemy gains: flat × 2 for two players, × players × act
+factor beyond, rounded. Artifact: +1 per extra player. Nothing else scales -
+damage, Strength gained, status cards - so each player takes what a solo
+player would. `tests/test_scaling.py` checks every registered enemy at 1-4
+players. Slippery is also multiplied by the player count, and Plow takes the
+same factor as HP, as the game scales them.
 
-A `Move` can be `targeted=True` without being an Attack — Aeonglass's
-Intensity is a debuff that still names one player.
+**Debuffs on players count down at the end of the enemy turn.** Vulnerable,
+Weak and Frail tick at the end of the enemy's turn whoever holds them
+(`TICKS_AFTER_ENEMY_TURN`), and one landing on a player skips its first
+count-down (`skip_next_tick`, the game's SkipNextDurationTick). So Roar's 3
+Vulnerable is there for the next three enemy turns. Tangled and Shrink count
+down at the end of their owner's turn, as in the game.
 
-Most Act 1 enemies are two moves long, so five helpers cover them:
-`attack("Tackle", 3)` is a Move hitting the announced target (`hits=2` for a
-double, `block=5` for one that guards as it swings, `inflict=(Frail, 2)` for a
-rider on the victim, `gain=(Strength, 2)` for one on the attacker),
-`buff("Hiss", Strength, 2)` and `guard("Reload", 3)` are the Strength and
-Block moves, `debuff("Roar", Vulnerable, 3)` puts a status on one named player,
-and `hand_out("slimed", 2)` builds the effects that put status cards into the
-target's discard pile. `HP_RANGE = (32, 35)` rolls the wiki's range once per
-fight from the seeded rng (replacing `DEFAULT_MAX_HP`), and `NAME = "Leaf
-Slime (M)"` is what the client shows instead of the class name. A whole
-slime is twelve lines:
+**Artifact** cancels the next debuff aimed at its holder, one charge each; the
+resolver does it and nothing is applied, so nothing reacting to a debuff fires.
 
-```python
-class LeafSlimeMedium(ScriptedEnemy):
-    NAME = "Leaf Slime (M)"
-    HP_RANGE = (32, 35)
+| Enemy | HP | Pattern (every move hits every player) |
+|---|---|---|
+| Nibbit | 42-46 | Butt 12 / Hesitant Slice 6 +5 Block / Hiss +2 Str; alone it opens with Butt |
+| Snapping Jaxfruit | 31-33 | Energy Orb 3, then +2 Str, every turn |
+| Fuzzy Wurm Crawler | 55-57 | Acid Goop 4 / Inhale +7 Str / Acid Goop |
+| Assassin Raider | 18-23 | Killshot 10 |
+| Axe Raider | 20-22 | Swing 5 +5 Block, Swing, Big Swing 12 |
+| Brute Raider | 30-33 | Beat 7 / Roar +3 Str |
+| Crossbow Raider | 18-21 | Reload 3 Block / Fire! 14 |
+| Tracker Raider | 21-25 | Track (2 Frail) once, then Unleash the Hounds 1 x 8 every turn |
+| Leaf Slime (S) | 11-15 | Tackle 3 or Goop (1 Slimed), random, never twice running |
+| Leaf Slime (M) | 32-35 | Sticky Shot (2 Slimed) / Clump Shot 8 |
+| Twig Slime (S) | 7-11 | Tackle 4 |
+| Twig Slime (M) | 26-28 | Sticky Shot (1 Slimed), then random: Pokey Pounce 11 (at most twice running) or Sticky Shot |
+| Wriggler | 17-21 | Nasty Bite 6 / Wriggle (1 Infection, +2 Str); slots 1 and 3 bite first |
+| Flyconid | 47-49 | random: Vulnerable Spores (2 Vuln, cooldown 3), Frail Spores 8 +2 Frail (cooldown 2), Smash 11; never twice running, never opens with Vulnerable |
+| Slithering Strangler | 53-55 | Constrict 3 every other turn (it stacks), Thwack 7 +5 Block or Lash 12 between |
+| Vine Shambler | 61 | Swipe 6 x 2 / Grasping Vines 8 + Tangled / Chomp 16 |
+| Shrinker Beetle | 38-40 | Shrinker (permanent Shrink while it lives) / Chomp 7 / Stomp 13 |
+| Mawler | 72 | Claw 4 x 2, then random: Rip and Tear 14, Claw (neither twice running), Roar 3 Vuln (once) |
+| Cubex Construct | 65 | arrives with 13 Block + 1 Artifact; Charge Up +2 Str, then Repeater Blast 7 (+2 Str) twice, Expel Blast 5 x 2 |
+| The Insatiable | 321 | Liquify Ground, then Thrash 8 x 2, Lunging Bite 28, Salivate +2 Str, Thrash, repeating from Thrash |
+| Aeonglass | 512 | Ebb 26 +33 Block / Eye Lasers 11 x 2 / Increasing Intensity; arrives with 3 Artifact |
+| Inklet | 11-17 | three of them; arrives with 1 Slippery; Jab 3, then at random Piercing Gaze 10 or Whirlwind 2 x 3, then Jab again; the middle one opens with Whirlwind |
+| Fogmog | 74 | Illusion (calls in an Eye With Teeth), Swipe 8 +1 Str, then Headbutt 14 (60%) or Swipe then Headbutt; then Swipe again |
+| Eye With Teeth | 6 | Distract: 3 Dazed into every discard pile, every turn; an Illusion (back at full HP the turn after it dies) and a Minion |
+| Phrog Parasite (elite) | 61-64 | Infect (3 Infection into every discard pile) / Lash 4 x 4; dies into four Wrigglers, stunned their first turn |
+| Bygone Effigy (elite) | 127 | Sleep, Wake (+10 Str), then Slashes 13 every turn; Slow: attacks on it +10% per card played that turn |
+| Byrdonis (elite) | 81-84 | Swoop 17 / Peck 3 x 3; Territorial: +1 Str at the end of every enemy turn |
+| Kin Priest (boss) | 190 | Orb of Frailty 8 +1 Frail, Orb of Weakness 8 +1 Weak, Beam 3 x 3, Ritual +2 Str |
+| Kin Follower | 58-59 | two, Minions of the Priest; Quick Slash 5, Boomerang 2 x 2, Power Dance +2 Str; the first opens with the Dance |
+| Vantom (boss) | 173 | arrives with 8 Slippery; Ink Blot 7, Inky Lance 6 x 2, Dismember 26 + 3 Wounds, Prepare +2 Str |
+| Ceremonial Beast (boss) | 252 | Stamp (Plow 150), then Plow 18 +2 Str every turn; at 150 HP the charge breaks - Strength gone, stunned a turn - then Beast Cry (Ringing: one card next turn), Stomp 15, Crush 17 +3 Str |
 
-    def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
-        super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        sticky = Move("Sticky Shot", Move.DEBUFF, hand_out("slimed", 2), targeted=True)
-        self._cycle = (sticky, attack("Clump Shot", 8))
+All 22 Overgrowth encounters can now be built (`tests/test_overgrowth.py`
+covers the eleven added since the first twenty-one); the Two-Tailed Rat, which
+also summons, is Underdocks'. Summoning: an `InstantSummon` effect goes to
+`Combat._resolve` (like `InstantPlayCard`, it needs Combat's ids, scaling and
+rng) and brings enemies in scaled, with an intent, led by the summoner,
+optionally Stunned or a Minion. A summoned enemy waits for the next enemy
+phase to act, as the game walks a snapshot of the lineup.
 
-    def pick_move(self, turn):
-        return self._cycle[turn % 2]
-```
+**Minions.** One leaves when its leader dies, and once no enemy of its own
+right is left standing (or about to revive), every Minion goes - the game's
+CreatureCmd.Kill - so the Kin's followers fall with the Priest.
 
-The plain Act 1 pool — Nibbit, Snapping Jaxfruit, Fuzzy Wurm Crawler, and the
-Assassin / Axe / Brute / Crossbow Raiders (`raiders.py`) — is built from those
-four helpers alone; `test_enemies.py` holds each one's script as a table of
-(move, damage taken, Block after, Strength after) per turn. Two things to know
-when reading them: an enemy's Block clears at the start of **its own** turn,
-so Crossbow Raider's Reload never protects it from the player (as in the
-reference), and Snapping Jaxfruit gains its Strength *after* the orb lands, so
-the orbs go 3, 5, 7.
+**Stun.** A stunned enemy shows a Stunned intent and skips its turn; the move
+it had lined up is put off to the next turn, not lost, as the game's stun hands
+back to it. A stunned arrival (Phrog's Wrigglers) then opens its pattern.
 
-The Act 1 debuffers — Flyconid, Slithering Strangler, Vine Shambler, Shrinker
-Beetle, Mawler, Tracker Raider, Cubex Construct — brought three statuses:
-
-- **Shrink** (Shrinker Beetle, 3 turns): the player's Attacks deal 30% less;
-  stacks with Weak (6 → 4 → 3). The wiki's "removed when the applier dies" is
-  modelled here, which the reference notes it does not do: a status knows its
-  `source`, so a dead Beetle's Shrink does nothing and is culled at the next tick.
-- **Constrict** (Slithering Strangler, 3): at the end of each of the player's
-  turns, 3 damage while the Strangler lives. Never decays; Block stops it;
-  Vulnerable does not touch it (see below); gone once the Strangler is dead.
-- **Tangled** (Vine Shambler): Attacks cost 1 more, one turn per stack. Applied
-  before the free-play grants are consulted, so an Attack Unrelenting made free
-  stays free. The reference applies **1** where its own note quotes the wiki as
-  "for 2 turns"; the reference's number is used (`VineShambler.TANGLED`).
-
-Fogmog is the one Act 1 normal left out: Illusory Spores *summons* an Eye With
-Teeth, and `Combat` has no way to add an enemy after `start()` yet — the
-newcomer would need an intent chosen and the co-op scaling applied. That is
-the next engine feature, shared with Phrog Parasite and Two-Tailed Rat.
+**HP is rolled as an enemy enters**, not when it is built: the session and
+summons build enemies with no rng, and `Combat._roll_hp` rolls each from the
+Niche stream among the values its range allows that no living enemy already
+has - the game's `SetUniqueMonsterHpValue`, so three Nibbits alone are 42-46
+all different. As in the game each rolls against the ones before it, which in
+co-op already carry their scaled HP, so there two can match. An enemy built
+with its own rng (the tests) keeps what it rolled.
 
 **A status can be attack-only.** `StatusEffect.ATTACKS_ONLY = True` means its
 `modify_incoming_damage` is consulted for attacks alone — Vulnerable, Exposed
@@ -329,26 +419,19 @@ not a model.
 
 ## Cards that enemies hand out
 
-Every status card an enemy or boss in the reference gives the player is
-ported. Two need the enemy to pass per-copy state, which `CardRef` carries:
-
-- **The Insatiable** (ported: `Units/Enemies/the_insatiable.py`) — Liquify
-  Ground applies `Sandpit(4)` and puts 6 `frantic_escape` into the deck: 3 at
-  the **bottom** of the draw pile, 3 in the discard. Sandpit counts down at each
-  of the owner's `TURN_START`s and kills at 0 - the fight is lethal on turn 5
-  unless escapes are found and played; each adds 1 and raises that copy's cost
-  by 1 for the combat.
-- **Aeonglass** (ported: `Units/Enemies/aeonglass.py`) — Increasing Intensity
-  hands one player Wither+X and takes 2+X Strength, where X is how many times
-  it has intensified. The card is `CardRef("wither", bonus_damage=X)` and
-  reads `AMOUNT + bonus_damage`, so it deals 3, 4, 5... The client sees only
-  `"wither"` in hand; the bonus is not on the wire yet (see the `hand_cards`
-  note above).
-- **Leaf Slime (S/M), Twig Slime (M)** (`leaf_slime.py`, `twig_slime.py`) —
-  Goop / Sticky Shot put 1 or 2 `slimed` into one named player's discard pile,
-  then the slime hits, alternating from the shot. Twig Slime (S) only Tackles.
-- **Wriggler** (`wriggler.py`) — Wriggle gives one player an `infection` and
-  the Wriggler 2 Strength; Nasty Bite follows.
+- **The Insatiable** - Liquify Ground gives every player 4 `sandpit` and six
+  `frantic_escape`: three shuffled into the draw pile at random depths, three
+  in the discard. Sandpit counts down at the start of each enemy turn, as the
+  game's does, and kills at 0 - so with 1 left the players still get that
+  whole turn. A Frantic Escape adds 1 and costs 1 more for the combat.
+- **Aeonglass** - Increasing Intensity upgrades every Wither already in play,
+  then hands every player a Wither at that level, then gains 3 Strength (4 the
+  next time, 5 after). A Wither deals 3 +3 per upgrade (`CardRef("wither",
+  bonus_damage=3 * level)`). Withering Presence, on every player from the
+  start, puts a Wither in their hand every 6 cards they play. The client sees
+  only `"wither"`; the level is not on the wire yet.
+- **Leaf / Twig Slimes** - `slimed` into every player's discard.
+- **Wriggler** - an `infection` to every player.
 
 Self-inflicted status damage (Burn, Toxic, Wither, Infection, Decay,
 Disintegration) is `is_attack=False`, as in the reference: it meets Block but
@@ -357,10 +440,37 @@ held at end of turn reacts to **its holder's** `TURN_END` only — `TURN_END` is
 emitted once per player, and the hand walk used to run for every emission, so
 a Burn dealt 2 per player in the fight. Found by the Wriggler's Infection.
 
+## The Ironclad pass: matching the installed game
+
+`tests/game_diff.py` reads the game's own card classes (decompiled from
+`sts2.dll`, v0.107.1) and compares every Ironclad card with ours. All 87 match
+on cost, values, upgrade, keywords, type, rarity and target. The behaviour
+changes that came with it, each copied from the game's code:
+
+- **Cruelty is added to Vulnerable, not multiplied after it**, and only for
+  the holder's attacks: 6 into Vulnerable is 6 x (1.5 + 0.25) = 10. The card
+  applies 25 (50 upgraded) and copies stack. `Vulnerable.modify_incoming_damage`
+  reads the attacker's `cruelty`.
+- **Tank doubles attack damage on the tank** (was 1.5x) and gives teammates
+  half damage from attacks (`protected`, the game's Guarded), which ends when
+  the tank dies. Neither touches damage that is not an attack.
+- **Aggression stacks**: `amount` Attacks pulled a turn.
+- **Thrash hits first, then eats** a random Attack and keeps its damage (with
+  your Strength) on that copy for the combat, like Rampage.
+- **Expect a Fight** is the game's card: 1 Energy per Attack in hand, then
+  `no_energy_gain` for the turn (energy gains from effects become 0).
+- **Forgotten Ritual** only pays if you exhausted a card earlier this turn.
+- **Burning Pact, Brand and True Grit+ ask** which card to exhaust.
+- **Havoc / Cascade** play from the top with a reshuffle (see HANDOFF.md);
+  Cascade+ plays X+1. **Howl from Beyond** replays itself from the exhaust
+  pile at end of turn. **Unrelenting / One-Two Punch** are visible statuses.
+- **Stone Armor is a Power**, and three rarities moved (Bloodletting common,
+  Dominate and Taunt uncommon).
+
 ## Player choice
 
-Twelve cards stop mid-resolution and ask the player a question. The machinery
-is one method:
+Fifteen cards and two powers (Entropy, Stratagem) stop mid-resolution and
+ask the player a question. The machinery is one method:
 
 ```python
 context.ask(ally, "Put a card on top of your Draw Pile",
@@ -375,7 +485,7 @@ is False by default). A headless or training run therefore plays straight
 through, exactly as it did before choices existed. `Session` sets the flag when
 players connect, and only then does anything wait.
 
-Three things worth knowing before adding a thirteenth:
+Four things worth knowing before adding another:
 
 - **Options are worked out when the question is put, not when it is queued.**
   Pass a callable when they come from a pile. Purity queues three questions at
@@ -384,17 +494,147 @@ Three things worth knowing before adding a thirteenth:
   card can ask from `get_effects`, from `follow_up` (Thinking Ahead, whose
   question only exists after the draw), or from a status's `on_event`
   (Stratagem, on a reshuffle).
+- **What comes after the choice goes inside the answer.** Burning Pact
+  exhausts and then draws; if the draw were returned from `get_effects` it
+  would resolve first, and the player could exhaust a card they just drew.
+  So `exhaust(chosen)` returns the exhaust and then the draw. Brand does the
+  same with its Strength.
 - **Each player holds one question at a time**; the rest of theirs wait in
   order behind it, so a card's questions arrive in the order it asked. The
   other player is not blocked and may be holding a question of their own. The
   turn will not advance until every question is answered - and a player who
   disconnects has theirs answered for them (`forfeit_choices`), or it never
   would.
+- **"Up to N" questions can be stopped.** Purity (0 to 3) and Neow's Fury (0
+  to 2) ask with `can_stop=True`, as the game's selector allows zero picks
+  there. Answering `PendingChoice.STOP` (-1) picks nothing; the answer is
+  never resolved, so the card asks nothing further. Every other question
+  refuses -1. A headless run still picks at random and never stops.
 
 On the wire: `choice_required` goes privately to whoever must answer, `choose`
-carries `option_index` back, and `to_dict()["choices"]` carries the same thing
-for any client that missed the message.
+carries `option_index` back (-1 to stop), and `to_dict()["choices"]` carries
+the same thing for any client that missed the message. Each question carries
+`can_stop`.
 
-True Grit is the thirteenth call site and stays random on purpose: its base
-printing reads "Exhaust 1 card **at random**". Only True Grit+ should ask, and
-our port does not yet split the two.
+True Grit asks only when upgraded: the base printing really is "at random",
+and the game's code chooses for you there. Armaments asks unupgraded and takes
+the whole hand upgraded, again as the game does.
+
+## The optional plugin
+
+The server can take one plugin, which tells players from the agent, shapes
+what each client receives, and watches the fight as it happens - the hook
+for the Characteristic Analyzer and the agent's format. **The game never
+needs it**: with no plugin file everyone gets the player format and nothing
+else changes.
+
+**Where it lives.** `config.PLUGIN` names a module under `Server/Plugins/`
+(`"Plugins.aura"` by default; `None` turns it off). The module provides
+`create_plugin()`, returning an object; `plugin_host.load_plugin` loads it at
+startup and `Session(plugin=...)` takes it. No file, an import error, no
+`create_plugin`, or one that raises: the server says so on its console and
+runs without a plugin.
+
+**Who is who.** A client may send `identify` with `{"role": "agent"}`. The
+session keeps it in `session.roles` (a client that never identifies is
+`"player"`) and answers with the current state, in that client's format. A
+human client never needs to send it, and without a plugin it changes nothing.
+
+**What the plugin may define** - all optional, each given the session first,
+so it can read `session.combat`, `session.players` and `session.roles`:
+
+| Method | When | Given |
+|---|---|---|
+| `format_message(session, recipient, role, message)` | every message, per recipient | a copy of the player-format message. Return the message to send, or `None` to send that client nothing |
+| `on_identify(session, unit_id, role)` | a client identified | |
+| `on_combat_start(session)` | the fight has begun | |
+| `on_turn_start(session)` | the players' turn has begun (turn 1 included) | `session.combat.turn_number` |
+| `on_action(session, action)` | a play or an answer went through | see below |
+| `on_turn_ended(session, unit_id)` | a player ended their turn, **before** the turn can move on | the state they ended in - the last player's too |
+| `on_round_end(session)` | everyone has ended; the enemies are next | |
+| `on_player_left(session, unit_id)` | a player left mid-fight | `session.combat.unattended` |
+| `on_combat_end(session, result)` | once, at the end | `"VICTORY"` / `"DEFEAT"` |
+
+`action` for a play: `action: "play"`, `unit_id`, `card_id`, `upgraded`,
+`hand_index`, `target_id`, and the card as it stood in hand just before -
+`cost` (`"X"` for X-cost), `damage` (`hand_damage`), `block`
+(`hand_blocks`), `energy` - then `results`. For an answer: `action:
+"choose"`, `unit_id`, `prompt`, `option_index`, `option` (`None` when they
+stopped an "up to N" question), `results`. One call per action a player
+chose: cards played by other cards (Havoc, Mayhem) come inside `results`.
+
+**What the server promises.**
+- No plugin: every message goes out exactly as the player format has it,
+  broadcasts and all.
+- With one, a broadcast is split per player so each copy can be shaped for
+  its recipient; `format_message` gets a copy, so reshaping one cannot
+  change another.
+- A plugin that raises is reported on the console and the game carries on:
+  a failing hook is skipped, a failing `format_message` sends that message
+  in the player format.
+- Everything handed to the plugin is in game units - HP, Block, damage,
+  costs, status amounts. **Normalizing for a network (tanh, soft scales,
+  one-hots) belongs to the AI's side**, not to the plugin or the server.
+
+**`Plugins/aura.py`** is the plugin `config.py` names. For now it does one
+thing: a client that identified as the agent gets a descriptor for every card
+- `hand_cards` and `deck_cards` on each player, the descriptor fields on each
+pile entry, `option_cards` on a question - built by `Plugins/card_groups.py`.
+A descriptor is `id`, `upgraded`, `type`, `cost`, `target`, `keywords`,
+`damage` (per hit), `hits`, `block`, `statuses` (what it applies, by scope:
+`self` / `target` / `all_allies` / `all_enemies`) and `groups` (`now`, `scale`,
+`team`, `self`). In hand, cost, damage and Block are what the hand shows now;
+out of hand, the printed cost and the card's own damage and Block. Every other
+client gets the player format untouched. A new status needs a role in
+`card_groups.STATUS_ROLES`, or `tests/test_card_groups.py` fails.
+
+It is also the Characteristic Analyzer (`Plugins/analyzer.py` has the
+arithmetic): every player who is not the agent is profiled on Aggression,
+Scaling and Teamwork, scored at each round end from that turn's history, and
+the agent's state carries `profiles`, `{unit_id: {A, S, T, cA, cS, cT}}`.
+Each scored turn writes two lines to the combat log: `analyzer_input`, the
+analyzer's input - the spec's History: `energy`, `hand`, `used`, `opp`,
+`incoming`, `block`, each card with its `id`, `upgraded`, `cost`, `dmg`,
+`block` and `groups` - and `profile_update`: the evidence, its weight, the
+context numbers and the profile. `python -m Plugins.history_export <log>`
+(from `Server/`) writes the input per teammate in the MockUpRB prototype's
+format, `[E_total, Used, Opp, D, B]` with each card `[cost, dmg, block,
+groups]`.
+
+**For human players** the effects message now says what happened (`action`,
+`card_id`, `upgraded`, `target_id`; `option` for an answer), so the terminal
+client prints "p2 played bash+ on e1", and each player in the state carries
+`ended_turn`, shown as "(ended)". `tests/test_plugin.py` covers loading, the
+no-plugin path, identify, every hook in order through a fight, per-recipient
+formats and a plugin that crashes.
+
+## The combat log
+
+Every fight is written to `config.LOG_DIR` (`2nd_model/logs/`, which git
+ignores; `None` turns it off), one file per combat named
+`combat_<date>_<time>_<seed>.jsonl`: one JSON object per line, flushed as it
+goes, so a crash keeps everything up to it. Each line has `seq`, `time` and
+`event`. The events, and what each carries, are listed at the top of
+`Server/combat_log.py`: joins, identify, `combat_start` (seed, act, enemies,
+each player's deck, full state), `turn_start` (state), every `play` (the
+card's cost, damage and Block before, and its results) and `choose`,
+`end_turn`, `round_end`, `refused` (the message and why), `error` (an
+unexpected exception, with its traceback), `left`, and `combat_end` (result
+and final state). Each play, answer and end turn also carries
+`legal_actions`, what was open instead; an answer carries the `options` too.
+
+**Agent decisions and profile updates.** Any action a client sends may carry
+a `decision` field - an agent's action probabilities, say. The game ignores
+it and the log keeps it on that action's line. A plugin adds its own lines
+with `session.log_event(event, **data)` (`"profile_update"`, for instance).
+
+**Replay.** The session now always has a seed (`Session(seed=...)`, or one it
+picks itself; a caller that passes its own `rng` keeps it and logs no seed).
+`combat_log.replay(lines, Combat)` sets the same fight up from
+`combat_start`, sends the recorded actions again, and compares every turn's
+state and the outcome with the log; `python combat_log.py <file>` does it
+from `Server/`. A replay needs the same cards, enemies and decks as the
+recording, and says so first when a deck differs. `tests/test_combat_log.py`
+logs whole fights (one with a player leaving), replays them exactly, and
+checks that changing one recorded action is caught. A log that cannot be
+written is reported once and the fight goes on without it.

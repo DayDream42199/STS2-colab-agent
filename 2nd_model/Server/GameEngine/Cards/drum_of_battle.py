@@ -22,7 +22,7 @@ class DrumOfBattle(Card):
 
     def get_effects(self, context):
         return [InstantDraw(source=context.source, target=context.source,
-                            amount=self.CARDS, rng=context.rng)]
+                            amount=self.CARDS, rng=context.rngs.shuffle)]
 
     def on_event(self, event, context):
         # Pays out when THIS card is exhausted, not when it is played.

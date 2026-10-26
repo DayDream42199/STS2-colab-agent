@@ -5,7 +5,7 @@ from ..Effects.InstantEffects.instant_boost_card import InstantBoostCard
 
 
 class Rampage(Card):
-    DAMAGE = 10
+    DAMAGE = 9
     INCREASE = 5
 
     def __init__(self):

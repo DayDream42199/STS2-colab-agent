@@ -1,11 +1,12 @@
 """Every scripted enemy, 1 to 4 players, both act factors: what scales and what
 must not.
 
-Real STS2 co-op, as the reference has it: HP x players x act (2 -> x2.2 in act
-1), Block flat x2 for two players and x players x act beyond, and NOTHING else
-- an enemy's damage, the Strength it gains and the status cards it hands out
-are the same numbers whether one player is there or four. Each move names one
-living player and only that player is hit.
+Real STS2 co-op: HP x players x act (2 -> x2.2 in act 1), Block flat x2 for
+two players and x players x act beyond, Artifact +1 per extra player - and
+NOTHING else. An enemy's damage, the Strength it gains and the status cards it
+hands out are the same numbers whether one player is there or four, and every
+move lands on every living player, so each of them takes what a solo player
+would. Which move comes next does not depend on the party either.
 """
 import random, sys
 import os
@@ -31,6 +32,8 @@ SCRIPTED = [k for k in known_enemy_type_ids()
 def fight(kind, players, act, seed, scale=True):
     allies = [create_ally("testally1", "p%d" % (i + 1), rng=random.Random(seed + i))
               for i in range(players)]
+    for a in allies:
+        a.deck = ["strike"] * 5 + ["defend"] * 4 + ["bash"]    # not whatever TestAlly1 holds today
     foe = create_enemy(kind, "e1", rng=random.Random(seed))
     c = Combat(allies, [foe], rng=random.Random(seed), act=act, scale_enemies=scale)
     c.start()
@@ -38,34 +41,33 @@ def fight(kind, players, act, seed, scale=True):
         a.max_hp = a.current_hp = HP
         a.block = 0
         # Deep enough that nothing is reshuffled in TURNS turns, so a card the
-        # enemy handed out is still in the discard (or, for The Insatiable's
-        # bottom-of-pile escapes, the draw pile) when we count it.
+        # enemy handed out is still in the discard or draw pile when counted.
         a.draw_pile = [CardRef("strike") for _ in range(60)]
     return c, allies, foe
 
 
 def play(kind, players, act, seed, scale=True):
-    """Per turn: (move, who was named, HP lost by everyone, enemy Block after,
-    enemy Strength after, status cards handed out so far per player)."""
+    """Per turn: (move, HP lost by each player, enemy Block after, enemy
+    Strength after, status cards handed out so far to each player)."""
     c, a, foe = fight(kind, players, act, seed, scale)
     rows = []
     for _ in range(TURNS):
-        move, named = foe.intent["name"], foe.intent.get("target")
+        move = foe.intent["name"]
         before = {p.unit_id: p.current_hp for p in a}
         for p in a:
+            # Into the discard, not away: the enemy's cards may have been drawn.
+            p.discard_pile.extend(p.hand)
             p.hand = []
         c.end_player_turn()
         for p in a:
-            # Debuffs off between turns, so damage is the printed number and
-            # comparable across party sizes: solo, a Roar's Vulnerable always
-            # lands on the one player the next hit finds; with four it may
-            # not. (Also keeps The Insatiable's Sandpit from eating the party.)
+            # Debuffs off between turns, so damage is the printed number
+            # (and The Insatiable's Sandpit does not eat the party).
             p.statuses.clear()
         strength = foe.get_status("strength")
-        lost = {p.unit_id: before[p.unit_id] - p.current_hp for p in a}
-        handed = tuple(sum(1 for r in p.draw_pile + p.discard_pile if r != "strike") for p in a)
-        rows.append((move, named, lost, foe.block,
-                     strength.amount if strength else 0, handed))
+        lost = [before[p.unit_id] - p.current_hp for p in a]
+        handed = [sum(1 for r in p.hand + p.draw_pile + p.discard_pile
+                      if r not in ("strike", "defend", "bash")) for p in a]
+        rows.append((move, lost, foe.block, strength.amount if strength else 0, handed))
     return c, a, foe, rows
 
 
@@ -86,45 +88,66 @@ for kind in SCRIPTED:
             check("%s: same moves as solo" % label,
                   [r[0] for r in rows] == [r[0] for r in solo],
                   [r[0] for r in rows])
-            check("%s: damage is not scaled" % label,
-                  [sum(r[2].values()) for r in rows] == [sum(r[2].values()) for r in solo],
-                  ([sum(r[2].values()) for r in rows], [sum(r[2].values()) for r in solo]))
+            check("%s: every player takes exactly what a solo player takes" % label,
+                  [r[1] for r in rows] == [[s[1][0]] * players for s in solo],
+                  ([r[1] for r in rows], [s[1][0] for s in solo]))
             check("%s: Strength is not scaled" % label,
-                  [r[4] for r in rows] == [r[4] for r in solo], [r[4] for r in rows])
-            # Liquify Ground gives every player the same six; everything else
-            # gives one named player the solo number. Neither grows with the party.
-            per_fight = players if kind == "theinsatiable" else 1
-            check("%s: status cards handed out are not scaled" % label,
-                  [sum(r[5]) for r in rows] == [s[5][0] * per_fight for s in solo],
-                  ([sum(r[5]) for r in rows], [s[5][0] * per_fight for s in solo]))
+                  [r[3] for r in rows] == [r[3] for r in solo], [r[3] for r in rows])
+            check("%s: every player gets the solo number of status cards" % label,
+                  [r[4] for r in rows] == [[s[4][0]] * players for s in solo],
+                  ([r[4] for r in rows], [s[4][0] for s in solo]))
 
             scale = block_scale(players, act)
             check("%s: Block x%.1f, rounded" % (label, scale),
-                  [r[3] for r in rows] == [round(s[3] * scale) for s in solo],
-                  ([r[3] for r in rows], [round(s[3] * scale) for s in solo]))
+                  [r[2] for r in rows] == [round(s[2] * scale) for s in solo],
+                  ([r[2] for r in rows], [round(s[2] * scale) for s in solo]))
 
-            # only the named player is hit
-            for move, named, lost, _, _, _ in rows:
-                hit = [uid for uid, n in lost.items() if n > 0]
-                if hit:
-                    check("%s: %s hit only %s, who was named" % (label, move, named),
-                          hit == [named], (hit, named))
+            artifact = foe.get_status("artifact")
+            solo_artifact = create_enemy(kind, "e1").__class__.__dict__.get("ARTIFACT")
+            if solo_artifact:
+                c2, _, foe2 = fight(kind, players, act, 1)
+                check("%s: Artifact %d + 1 per extra player" % (label, solo_artifact),
+                      foe2.get_status("artifact").amount == solo_artifact + players - 1,
+                      foe2.get_status("artifact").amount)
+            solo_slippery = create_enemy(kind, "e1").__class__.__dict__.get("SLIPPERY")
+            if solo_slippery:
+                c3, _, foe3 = fight(kind, players, act, 1)
+                check("%s: Slippery %d x players" % (label, solo_slippery),
+                      foe3.get_status("slippery").amount == solo_slippery * players,
+                      foe3.get_status("slippery").amount)
 
-    # four players, many fights: everyone gets picked on
-    named = set()
-    for seed in range(30):
-        c, a, foe = fight(kind, 4, "act1", seed)
-        named.add(foe.intent.get("target"))
-        for _ in range(3):
+# --- the intent tells the truth about Block -----------------------------------
+# Whatever Block an enemy announces is what it ends up with, at every party
+# size. Dummy1 announced 2 and gained 4 with two players: the Block was scaled
+# and the intent was not. Dummy1 puts it in "amount" on a block intent; the
+# scripted enemies carry it in "block", on attacks that guard as they swing too.
+def announced_block(enemy):
+    intent = enemy.intent or {}
+    if "block" in intent:
+        return intent["block"]
+    return intent.get("amount", 0) if intent.get("type") == "block" else 0
+
+for kind in known_enemy_type_ids():
+    for players in (1, 2, 3, 4):
+        c, a, foe = fight(kind, players, "act1", 3)
+        told, got = [], []
+        for _ in range(TURNS):
+            told.append(announced_block(foe))
             for p in a:
                 p.hand = []
             c.end_player_turn()
             for p in a:
                 p.statuses.clear()
-            named.add(foe.intent.get("target"))
-    named.discard(None)
-    check("%s: over 30 four-player fights every player gets named" % kind,
-          named == {"p1", "p2", "p3", "p4"}, sorted(named))
+            got.append(foe.block)          # gained this enemy phase; cleared at its next
+        check("%s %dp: Block announced == Block gained, every turn" % (kind, players),
+              told == got, (told, got))
+
+c, a, foe = fight("dummy1", 2, "act1", 1)
+for p in a:
+    p.hand = []
+c.end_player_turn()                                   # turn 1 attack; turn 2 is the block
+check("the reported case: Dummy1 with two players announces 4 Block, not 2",
+      foe.intent == {"type": "block", "amount": 4}, foe.intent)
 
 # scaling off means off, whatever the party size
 c, a, foe = fight("nibbit", 4, "act2", 1, scale=False)

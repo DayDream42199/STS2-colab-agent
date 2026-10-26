@@ -27,7 +27,7 @@ class BeatDown(Card):
         if not attacks:
             return []
         picked = (attacks if len(attacks) <= self.COUNT
-                  else context.rng.sample(attacks, self.COUNT))
+                  else context.rngs.shuffle.sample(attacks, self.COUNT))
         return [
             InstantPlayCard(source=context.source, target=context.source,
                             card_id=card_id,

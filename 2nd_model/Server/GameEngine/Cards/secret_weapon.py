@@ -11,7 +11,7 @@ class SecretWeapon(Card):
             name = "Secret Weapon",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 0,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)
@@ -21,12 +21,21 @@ class SecretWeapon(Card):
         # Imported here, not at module level: card_registry imports this
         # module, so a top-level import would be circular.
         from ..Registry.card_registry import create_card
-        attacks = [c for c in context.source.draw_pile
-                   if create_card(c).card_type is CardType.ATTACK]
-        picked = [context.rng.choice(attacks)] if attacks else []
-        if not picked:
+        ally = context.source
+
+        # The player picks, as the game's CardSelectCmd.FromCombatPile does -
+        # it is not random. Read when the question is put.
+        def attacks():
+            return [c for c in ally.draw_pile
+                    if create_card(c).card_type is CardType.ATTACK]
+
+        if not attacks():
             return []
-        return [InstantMoveCard(
-            source=context.source, target=context.source, card_ids=picked,
-            from_pile=InstantMoveCard.DRAW, to_pile=InstantMoveCard.HAND,
-        )]
+
+        def take(chosen):
+            return [InstantMoveCard(
+                source=ally, target=ally, card_ids=[chosen],
+                from_pile=InstantMoveCard.DRAW, to_pile=InstantMoveCard.HAND)]
+
+        context.ask(ally, "Put an Attack from your Draw Pile into your Hand", attacks, take)
+        return []

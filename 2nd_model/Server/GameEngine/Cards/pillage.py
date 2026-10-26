@@ -24,5 +24,5 @@ class Pillage(Card):
                 source=context.source, target=context.target, amount=self.DAMAGE),
             InstantDrawUntil(
                 source=context.source, target=context.source,
-                while_type=CardType.ATTACK, rng=context.rng),
+                while_type=CardType.ATTACK, rng=context.rngs.shuffle),
         ]

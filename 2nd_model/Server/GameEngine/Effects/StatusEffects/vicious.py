@@ -24,4 +24,4 @@ class Vicious(StatusEffect):
         if context.payload.get("effect_id") != "vulnerable":
             return None
         return [InstantDraw(source=context.source, target=context.source,
-                           amount=self.amount, rng=context.rng)]
+                           amount=self.amount, rng=context.rngs.shuffle)]

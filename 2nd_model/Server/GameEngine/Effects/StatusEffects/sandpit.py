@@ -6,9 +6,11 @@ from ..InstantEffects.instant_hp_loss import InstantHpLoss
 class Sandpit(StatusEffect):
     """In `amount` turns, you are eaten and die.
 
-    Counts down at the start of each of the owner's turns, and kills when it
-    reaches 0. It does not decay at end of turn: the only way to push it back
-    is Frantic Escape, which adds a turn."""
+    Counts down at the start of each enemy turn, as the game's SandpitPower
+    does (AfterSideTurnStartLate, enemy side) - so the player gets their whole
+    turn to dig for Frantic Escapes before it bites. Kills when it reaches 0.
+    It does not decay at end of turn: the only way to push it back is
+    Frantic Escape, which adds a turn."""
 
     IS_DEBUFF = True
 
@@ -22,10 +24,10 @@ class Sandpit(StatusEffect):
         pass  # ticks at TURN_START, see the class docstring
 
     def on_event(self, event, context):
-        if event is not GameEvent.TURN_START:
+        if event is not GameEvent.ENEMY_TURN_START:
             return None
-        if context.target is not context.source:
-            return None
+        if self.source is not None and not self.source.is_alive():
+            return None          # the pit goes with the boss
         self.amount -= 1
         if self.amount > 0:
             return None

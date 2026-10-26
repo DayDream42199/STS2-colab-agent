@@ -4,7 +4,7 @@ from ..Effects.StatusEffects.juggernaut import Juggernaut as JuggernautStatus
 
 
 class Juggernaut(Card):
-    AMOUNT = 5
+    AMOUNT = 6
 
     def __init__(self):
         super().__init__(

@@ -29,7 +29,7 @@ class BeaconOfHope(StatusEffect):
         if shared <= 0:
             return None
         return [
-            InstantBlock(source=context.source, target=ally, amount=shared)
+            InstantBlock(powered=False, card=False, source=context.source, target=ally, amount=shared)
             for ally in context.all_allies
             if ally is not context.source and ally.is_alive()
         ]

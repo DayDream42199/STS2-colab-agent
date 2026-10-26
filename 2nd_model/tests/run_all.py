@@ -27,7 +27,16 @@ SCRIPTS = [
     "test_reactive.py",
     "test_fork.py",        # card identity, upgrades, and every batch since
     "test_choice.py",      # player choice through Session
+    "test_card_text.py",   # every card's text, filled from its own numbers
+    "test_plugin.py",      # the optional server plugin: absent, present, failing
+    "test_combat_log.py",  # every action and outcome logged; the fight replays from it
+    "test_legal_actions.py",  # every listed action accepted, every other refused
+    "test_rng_streams.py", # one seeded stream per purpose; the global random untouched
+    "test_card_groups.py", # the agent plugin: card groups and descriptors
+    "test_analyzer.py",    # the Characteristic Analyzer: arithmetic, and through the session
+    "test_ironclad_game.py",  # Ironclad behaviour as the installed game's code has it
     "test_enemies.py",     # scripted enemies, the bosses, the Act 1 pool
+    "test_overgrowth.py",  # the Overgrowth enemies ported since: Inklet, Fogmog, ...
     "test_scaling.py",     # every enemy at 1-4 players: what scales, what must not
     "test_review.py",
     "test_bughunt.py",

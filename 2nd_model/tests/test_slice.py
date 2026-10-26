@@ -27,7 +27,7 @@ def play(c, ally, card_id, target=None):
     ally.hand = [card_id]
     return c.play_card(ally, 0, target=target)
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- Thunderclap: 4 damage + 1 Vulnerable to ALL enemies --------------------
 c, a, es = fight(n_enemies=3, seed=2)
@@ -96,12 +96,12 @@ c.end_player_turn()
 check("Strength survives the turn", a[0].get_status("strength").amount == 2,
       a[0].to_dict()["statuses"])
 
-# --- Setup Strike: 7 damage, 3 Strength this turn --------------------------
+# --- Setup Strike: 7 damage, 2 Strength this turn (the game's number) ------
 c, a, es = fight(seed=9)
 play(c, a[0], "setup_strike", es[0])
 check("Setup Strike deals 7", es[0].current_hp == 193, es[0].current_hp)
-check("Setup Strike grants 3 Strength this turn",
-      a[0].get_status("strength_this_turn").amount == 3)
+check("Setup Strike grants 2 Strength this turn",
+      a[0].get_status("strength_this_turn").amount == 2)
 check("Strength this turn lands on us, not the enemy",
       es[0].get_status("strength_this_turn") is None)
 c.end_player_turn()

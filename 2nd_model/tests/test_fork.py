@@ -12,6 +12,7 @@ from GameEngine.Combat.combat import Combat
 from GameEngine.Registry.unit_registry import create_ally, create_enemy
 from GameEngine.Registry.card_registry import create_card, known_card_ids
 from GameEngine.Cards._card_ref import CardRef, is_upgraded
+from GameEngine.Effects.StatusEffects.strength import Strength
 
 bad = []
 def check(l, c, d=""):
@@ -46,7 +47,7 @@ def play(c, ally, card_id, target=None):
     ally.hand = [card_id] if isinstance(card_id, CardRef) else hand(card_id)
     return c.play_card(ally, 0, target=target)
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- the ref itself ---------------------------------------------------------
 r = CardRef("strike")
@@ -118,11 +119,11 @@ check("and the deck entry is not the copy, so combat cannot write back to it",
 # --- Rampage ----------------------------------------------------------------
 c, a, es = fight()
 ref = CardRef("rampage")
-for expected in (390, 375, 355):          # 10, then 15, then 20
+for expected in (391, 377, 358):          # 9, then 14, then 19
     a[0].hand = [ref]
     c.play_card(a[0], 0, target=es[0])
     a[0].discard_pile = []
-    check("Rampage climbs 10 / 15 / 20 on the same copy (now %d hp)" % expected,
+    check("Rampage climbs 9 / 14 / 19 on the same copy (now %d hp)" % expected,
           es[0].current_hp == expected, es[0].current_hp)
 
 c, a, es = fight()
@@ -131,7 +132,7 @@ a[0].hand = [grown]
 c.play_card(a[0], 0, target=es[0])
 a[0].hand = [fresh]
 c.play_card(a[0], 0, target=es[0])
-check("a second Rampage still opens at 10", es[0].current_hp == 380,
+check("a second Rampage still opens at 9", es[0].current_hp == 382,
       es[0].current_hp)
 
 c, a, es = fight()
@@ -140,7 +141,7 @@ a[0].hand = [ref]
 c.play_card(a[0], 0, target=es[0])
 a[0].hand = [ref]
 c.play_card(a[0], 0, target=es[0])
-check("Rampage+ climbs by 10", es[0].current_hp == 370, es[0].current_hp)
+check("Rampage+ climbs by 9: 9 then 18", es[0].current_hp == 373, es[0].current_hp)
 
 # --- Maul -------------------------------------------------------------------
 c, a, es = fight()
@@ -160,26 +161,54 @@ check("a Maul still in the draw pile is boosted too",
       a[0].draw_pile[0].bonus_damage == 2, a[0].draw_pile[0].bonus_damage)
 
 # --- Thrash -----------------------------------------------------------------
+# The game's order: hit twice at what this copy has grown to, THEN eat a
+# random Attack from hand and keep its damage on this copy for the combat.
 c, a, es = fight(seed=5)
-a[0].hand = hand("thrash", "bludgeon")
+ref = CardRef("thrash")
+a[0].hand = [ref, CardRef("bludgeon")]
 c.play_card(a[0], 0, target=es[0])
-check("Thrash eats the Bludgeon in hand and hits twice for 4+32",
-      es[0].current_hp == 328, es[0].current_hp)
-check("and the eaten card is in the exhaust pile",
+check("first use: Thrash hits twice for 4, and only then eats the Bludgeon",
+      es[0].current_hp == 392, es[0].current_hp)
+check("the eaten card is in the exhaust pile",
       a[0].exhaust_pile == ["bludgeon"], a[0].exhaust_pile)
+check("and this copy keeps the Bludgeon's 32", ref.bonus_damage == 32, ref.bonus_damage)
+
+a[0].discard_pile = []
+a[0].hand = [ref, CardRef("strike")]
+c.play_card(a[0], 0, target=es[0])
+check("second use: it hits twice for 4+32 = 36, then eats the Strike",
+      es[0].current_hp == 392 - 72, es[0].current_hp)
+check("...growing by the Strike's 6 to +38", ref.bonus_damage == 38, ref.bonus_damage)
+
+a[0].discard_pile = []
+a[0].hand = [ref]
+c.play_card(a[0], 0, target=es[0])
+check("third use, nothing to eat: twice for 4+38 = 42, and no further growth",
+      es[0].current_hp == 392 - 72 - 84 and ref.bonus_damage == 38,
+      (es[0].current_hp, ref.bonus_damage))
 
 c, a, es = fight(seed=5)
-a[0].hand = hand("thrash", "defend")
+fresh = CardRef("thrash")
+a[0].hand = [fresh, CardRef("defend")]
 c.play_card(a[0], 0, target=es[0])
 check("with no Attack to eat, Thrash just hits twice for 4",
-      es[0].current_hp == 392 and a[0].exhaust_pile == [],
-      (es[0].current_hp, a[0].exhaust_pile))
+      es[0].current_hp == 392 and a[0].exhaust_pile == [] and fresh.bonus_damage == 0,
+      (es[0].current_hp, a[0].exhaust_pile, fresh.bonus_damage))
 
 c, a, es = fight(seed=5)
-a[0].hand = [CardRef("thrash"), CardRef("strike", upgraded=True)]
+ref = CardRef("thrash")
+a[0].hand = [ref, CardRef("strike", upgraded=True)]
 c.play_card(a[0], 0, target=es[0])
 check("an upgraded Strike feeds Thrash its upgraded 9, not 6",
-      es[0].current_hp == 374, es[0].current_hp)
+      ref.bonus_damage == 9, ref.bonus_damage)
+
+c, a, es = fight(seed=5)
+ref = CardRef("thrash")
+a[0].apply_status(Strength(source=a[0], target=a[0], amount=2))
+a[0].hand = [ref, CardRef("strike")]
+c.play_card(a[0], 0, target=es[0])
+check("the eaten card's damage counts your Strength: 6 + 2 = 8",
+      ref.bonus_damage == 8, ref.bonus_damage)
 
 # --- Bolas / Thrumming Hatchet ----------------------------------------------
 c, a, es = fight()
@@ -636,15 +665,6 @@ c, a, es = fight(seed=21)
 a[0].hand = [CardRef("discovery", upgraded=True)]
 c.play_card(a[0], 0)
 check("Discovery+ does not exhaust", a[0].exhaust_pile == [], a[0].exhaust_pile)
-
-c, a, es = fight(seed=4)
-a[0].hand = hand("abundance")
-c.play_card(a[0], 0)
-check("Abundance adds a Power, free this turn",
-      len(a[0].hand) == 1
-      and create_card(a[0].hand[0]).card_type.name == "POWER"
-      and a[0].free_this_turn == [a[0].hand[0]],
-      [(str(r), create_card(r).card_type.name) for r in a[0].hand])
 
 # --- Dual Wield -------------------------------------------------------------
 c, a, es = fight(seed=3)

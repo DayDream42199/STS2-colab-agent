@@ -1,4 +1,5 @@
 from ._card import Card
+from ..Effects.StatusEffects.one_two_punch import OneTwoPunch as OneTwoPunchStatus
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 
 
@@ -17,7 +18,7 @@ class OneTwoPunch(Card):
         )
 
     def get_effects(self, context):
-        # A plain counter on the ally, like retain_hand: Combat spends it in
-        # _extra_plays when the next Attack is played.
-        context.source.extra_attack_plays += self.REPLAYS
-        return []
+        # The game's OneTwoPunchPower: a status for this turn, spent one
+        # charge per Attack by Combat._extra_plays.
+        return [OneTwoPunchStatus(
+            source=context.source, target=context.source, amount=self.REPLAYS)]

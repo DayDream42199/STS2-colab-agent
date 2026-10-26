@@ -1,10 +1,11 @@
-from ._scripted import ScriptedEnemy, attack, debuff
+from ._scripted import ScriptedEnemy, Branch, attack, debuff
 from ...Effects.StatusEffects.vulnerable import Vulnerable
 
 
 class Mawler(ScriptedEnemy):
-    """Act 1. Roars first (3 Vulnerable on one player), then alternates Rip
-    and Tear (14) with Claw (4 x 2)."""
+    """Act 1. Opens with Claw (4 x 2), then picks at random: Rip and Tear (14)
+    never twice running, Claw never twice running, and Roar (3 Vulnerable on
+    every player) at most once a fight."""
 
     DEFAULT_MAX_HP = 72
     DEFAULT_HP_VARIANCE = 0
@@ -16,11 +17,10 @@ class Mawler(ScriptedEnemy):
 
     def __init__(self, unit_id, max_hp=None, hp_variance=None, rng=None):
         super().__init__(unit_id, max_hp=max_hp, hp_variance=hp_variance, rng=rng)
-        self._opener = debuff("Roar", Vulnerable, self.ROAR)
-        self._cycle = (attack("Rip and Tear", self.RIP_AND_TEAR),
-                       attack("Claw", self.CLAW, hits=self.CLAW_HITS))
+        self._claw = attack("Claw", self.CLAW, hits=self.CLAW_HITS)
+        self._branches = (Branch(attack("Rip and Tear", self.RIP_AND_TEAR), Branch.NO_REPEAT),
+                          Branch(debuff("Roar", Vulnerable, self.ROAR), Branch.ONCE),
+                          Branch(self._claw, Branch.NO_REPEAT))
 
     def pick_move(self, turn):
-        if turn == 0:
-            return self._opener
-        return self._cycle[(turn - 1) % len(self._cycle)]
+        return self._claw if turn == 0 else self.choose(self._branches)

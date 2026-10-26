@@ -26,7 +26,7 @@ class Distraction(Card):
             card_class=CardClass.IRONCLAD, card_type=CardType.SKILL)
         if not pool:
             return []
-        picked = context.rng.choice(pool)
+        picked = context.rngs.card_generation.choice(pool)
         context.source.free_this_turn.append(picked)
         return [InstantAddCard(
             source=context.source, target=context.source,

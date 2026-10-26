@@ -17,12 +17,15 @@ class PerfectedStrike(Card):
             target_type = TargetType.ENEMY
         )
 
-    def get_effects(self, context):
+    def base_damage(self, ally):
         # Counts the whole deck, not just the hand. Card ids are snake_case,
         # so "strike" catches Strike, Twin Strike, Pommel Strike and the rest.
-        strikes = sum(1 for card_id in context.source.deck if "strike" in card_id)
+        strikes = sum(1 for card_id in ally.deck if "strike" in card_id)
+        return self.DAMAGE + self.EXTRA_PER_STRIKE * strikes
+
+    def get_effects(self, context):
         return [InstantDamage(
             source=context.source,
             target=context.target,
-            amount=self.DAMAGE + self.EXTRA_PER_STRIKE * strikes,
+            amount=self.base_damage(context.source),
         )]

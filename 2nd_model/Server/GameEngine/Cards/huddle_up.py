@@ -24,7 +24,7 @@ class HuddleUp(Card):
         # "another player" cards there is no self-target guard here.
         return [
             InstantDraw(source=context.source, target=ally,
-                        amount=self.CARDS, rng=context.rng)
+                        amount=self.CARDS, rng=context.rngs.shuffle)
             for ally in context.all_allies
             if ally.is_alive()
         ]

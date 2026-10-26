@@ -4,7 +4,7 @@ from ..Effects.StatusEffects.crimson_mantle import CrimsonMantle as CrimsonMantl
 
 
 class CrimsonMantle(Card):
-    AMOUNT = 7
+    AMOUNT = 8
 
     def __init__(self):
         super().__init__(

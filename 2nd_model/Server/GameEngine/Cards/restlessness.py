@@ -27,6 +27,6 @@ class Restlessness(Card):
             return []
         return [
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
             InstantEnergy(source=context.source, target=context.source, amount=self.ENERGY),
         ]

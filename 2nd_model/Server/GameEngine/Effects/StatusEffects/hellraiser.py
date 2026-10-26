@@ -37,5 +37,5 @@ class Hellraiser(StatusEffect):
             played.append(InstantPlayCard(
                 source=context.source, target=context.source,
                 card_id=card_id, from_pile=InstantPlayCard.HAND,
-                at=context.rng.choice(living)))
+                at=context.rngs.targets.choice(living)))
         return played or None

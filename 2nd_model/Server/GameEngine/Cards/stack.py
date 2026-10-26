@@ -18,9 +18,12 @@ class Stack(Card):
             target_type = TargetType.SELF
         )
 
+    def base_block(self, ally):
+        return len(ally.discard_pile) + self.BONUS
+
     def get_effects(self, context):
         return [InstantBlock(
             source=context.source,
             target=context.source,
-            amount=len(context.source.discard_pile) + self.BONUS,
+            amount=self.base_block(context.source),
         )]

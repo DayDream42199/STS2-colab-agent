@@ -12,7 +12,7 @@ class Bludgeon(Card):
             card_type = CardType.ATTACK,
             card_class = CardClass.IRONCLAD,
             rarity = CardRarity.UNCOMMON,
-            cost = 2,
+            cost = 3,
             target_type = TargetType.ENEMY
         )
 

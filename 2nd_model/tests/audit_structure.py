@@ -77,9 +77,11 @@ for cls in status_classes:
 for eid, k in ids_seen.items():
     if k > 1: bad("effect_id %r used by %d statuses" % (eid, k))
 
-# --- instant effects: every one has a Resolver handler ----------------------
+# --- instant effects: every one has a handler, in Resolver or in Combat -----
+# (Combat._resolve keeps the two that need it: a card play, a summon.)
 from GameEngine.Resolution import resolver as R
-src = io.open(R.__file__, encoding="utf-8").read()
+from GameEngine.Combat import combat as C
+src = io.open(R.__file__, encoding="utf-8").read() + io.open(C.__file__, encoding="utf-8").read()
 inst_dir = os.path.join(G, "Effects", "InstantEffects")
 for f in sorted(os.listdir(inst_dir)):
     if not f.endswith(".py") or f.startswith("_"): continue
@@ -87,8 +89,8 @@ for f in sorted(os.listdir(inst_dir)):
     for v in vars(mod).values():
         if inspect.isclass(v) and issubclass(v, InstantEffect) and v is not InstantEffect \
                 and v.__module__ == mod.__name__:
-            if "isinstance(effect, %s)" % v.__name__ not in src and v.__name__ != "InstantPlayCard":
-                bad("%s has no Resolver.resolve branch" % v.__name__)
+            if "isinstance(effect, %s)" % v.__name__ not in src:
+                bad("%s has no branch in Resolver.resolve or Combat._resolve" % v.__name__)
 
 # --- upgrade table names exist on the card ----------------------------------
 from GameEngine.Cards._upgrades import UPGRADES

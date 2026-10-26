@@ -16,6 +16,11 @@ from GameEngine.Registry.card_registry import create_card
 from GameEngine.Effects.StatusEffects.vulnerable import Vulnerable
 from GameEngine.Resolution.resolver import Resolver
 
+# These checks were written against one Dummy (the committed config.py).
+# config.py's lineup is whoever runs the server's to change, so it is pinned
+# here: with two enemies, killing e1 cannot end the fight.
+Session.ENEMY_TYPE_IDS = ("dummy1",)
+
 notes = []
 
 def check(label, cond, detail=""):

@@ -20,5 +20,9 @@ class ForgottenRitual(Card):
         )
 
     def get_effects(self, context):
+        # Only if a card of yours was exhausted earlier this turn. This one is
+        # exhausted after it resolves, so it cannot count itself.
+        if context.source.turn_count("cards_exhausted") <= 0:
+            return []
         return [InstantEnergy(
             source=context.source, target=context.source, amount=self.ENERGY)]

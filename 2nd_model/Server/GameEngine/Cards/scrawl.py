@@ -24,4 +24,4 @@ class Scrawl(Card):
         if missing <= 0:
             return []
         return [InstantDraw(source=context.source, target=context.source,
-                            amount=missing, rng=context.rng)]
+                            amount=missing, rng=context.rngs.shuffle)]

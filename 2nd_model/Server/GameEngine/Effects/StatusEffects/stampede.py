@@ -31,6 +31,6 @@ class Stampede(StatusEffect):
             return None
         return [InstantPlayCard(
             source=context.source, target=context.source,
-            card_id=context.rng.choice(attacks),
+            card_id=context.rngs.shuffle.choice(attacks),
             from_pile=InstantPlayCard.HAND,
-            at=context.rng.choice(living))]
+            at=context.rngs.targets.choice(living))]

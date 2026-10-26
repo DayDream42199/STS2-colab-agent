@@ -32,7 +32,7 @@ class Entropy(StatusEffect):
         pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
         if not ally.hand or not pool:
             return None
-        replacement = context.rng.choice(pool)
+        replacement = context.rngs.card_selection.choice(pool)
 
         def transform(chosen):
             return [

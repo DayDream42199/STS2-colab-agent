@@ -16,13 +16,11 @@ class Cascade(Card):
         )
 
     def get_effects(self, context):
-        draw = context.source.draw_pile
-        # The pile is drawn from the end, so the last X entries are the top X,
-        # and they are played from the top down.
-        top = draw[-context.x_amount:] if context.x_amount else []
-        return [
-            InstantPlayCard(source=context.source, target=context.source,
-                            card_id=card_id,
-                            from_pile=InstantPlayCard.DRAW)
-            for card_id in reversed(top)
-        ]
+        # Upgraded, it plays one more than was paid - X+1 - which lives in
+        # the play itself, not in the upgrade table.
+        count = context.x_amount + (1 if self.upgraded else 0)
+        if count <= 0:
+            return []
+        return [InstantPlayCard(
+            source=context.source, target=context.source, card_id=None,
+            from_pile=InstantPlayCard.DRAW, count=count)]

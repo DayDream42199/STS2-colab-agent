@@ -1,10 +1,12 @@
 """Which cards from the card list are deliberately not in the registry, and why.
 
-Two different reasons, kept apart on purpose:
+Three different reasons, kept apart on purpose:
 
   EXCLUDED  cannot exist in this game. Nothing in an Ironclad-only co-op run
             can produce them, so porting them would add cards no action can
             ever reach. These are not "later" - they are never.
+
+  REMOVED   on the card list, but no longer in the game at all.
 
   DEFERRED  real cards with real values, blocked on a system that does not
             exist yet. The reason names the missing system.
@@ -48,6 +50,17 @@ EXCLUDED = {
 }
 
 
+# On the card list, but gone from the current game: none of these is in the
+# installed game's sts2.dll (v0.107.1), and all four are marked purple on the
+# checklist. Deleted from the registry, not deferred.
+REMOVED = {
+    "Blaze": "removed from the game",
+    "Midnight": "removed from the game",
+    "Outrage": "removed from the game",
+    "Abundance": "removed from the game",
+}
+
+
 DEFERRED = {
     # Never in scope for a combat replica.
     "Alchemize": "potions - no potion system ported",
@@ -58,7 +71,7 @@ DEFERRED = {
 
 
 def coverage(card_list_names):
-    """Split a list of card names into ported / excluded / deferred / missing.
+    """Split a list of card names into ported / excluded / removed / deferred / missing.
 
     `missing` is the interesting bucket: names that are on the list, are not
     ported, and have no recorded reason - i.e. still to do.
@@ -75,12 +88,14 @@ def coverage(card_list_names):
 
     ported = {key(create_card(cid).name) for cid in known_card_ids()}
 
-    result = {"ported": [], "excluded": [], "deferred": [], "missing": []}
+    result = {"ported": [], "excluded": [], "removed": [], "deferred": [], "missing": []}
     for name in card_list_names:
         if key(name) in ported:
             result["ported"].append(name)
         elif name in EXCLUDED:
             result["excluded"].append(name)
+        elif name in REMOVED:
+            result["removed"].append(name)
         elif name in DEFERRED:
             result["deferred"].append(name)
         else:
@@ -92,12 +107,16 @@ if __name__ == "__main__":
     ported = known_card_ids()
     print(f"ported   {len(ported):4}")
     print(f"excluded {len(EXCLUDED):4}  (cannot exist in this game)")
+    print(f"removed  {len(REMOVED):4}  (no longer in the game)")
     print(f"deferred {len(DEFERRED):4}  (blocked on a missing system)")
 
     print()
     print("excluded:")
     for name in sorted(EXCLUDED):
         print(f"   {name:20} {EXCLUDED[name]}")
+
+    print()
+    print("removed from the game:", ", ".join(sorted(REMOVED)))
 
     print()
     print("deferred, grouped by what is missing:")

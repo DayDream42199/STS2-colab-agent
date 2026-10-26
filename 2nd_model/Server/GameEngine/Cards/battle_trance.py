@@ -22,6 +22,6 @@ class BattleTrance(Card):
         # Draw first, then the lockout, or the card cancels its own draw.
         return [
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
             NoMoreDraw(source=context.source, target=context.source, amount=1),
         ]

@@ -1,4 +1,5 @@
 from ._card import Card
+from ..Effects.StatusEffects.free_attack import FreeAttack
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.InstantEffects.instant_damage import InstantDamage
 
@@ -18,8 +19,9 @@ class Unrelenting(Card):
         )
 
     def get_effects(self, context):
-        # A plain counter on the ally, spent by Combat when the next Attack is
-        # played. No deadline - the card does not say "this turn".
-        context.source.free_next_attack += 1
-        return [InstantDamage(
-            source=context.source, target=context.target, amount=self.DAMAGE)]
+        # A status the players can see, not a hidden counter: the game's
+        # FreeAttackPower. Combat spends it on the next Attack played.
+        return [
+            InstantDamage(source=context.source, target=context.target, amount=self.DAMAGE),
+            FreeAttack(source=context.source, target=context.source, amount=1),
+        ]

@@ -38,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "Server"))
 
 from GameEngine.Combat.combat import Combat, CombatResult
+from GameEngine.Context.context import PendingChoice
 from GameEngine.Registry.unit_registry import create_ally, create_enemy
 from GameEngine.Registry.card_registry import create_card, known_card_ids
 from GameEngine.Cards._card import Card
@@ -52,8 +53,8 @@ from GameEngine.Effects.StatusEffects.vulnerable import Vulnerable
 
 # ---------------------------------------------------------------- settings --
 CARD = "*"        # the card under test; the command line overrides it
-ALLIES = (1, 2)        # party sizes to try
-ENEMIES = (1, 13)       # enemy counts to try
+ALLIES = (1, 4)        # party sizes to try
+ENEMIES = (1, 12)       # enemy counts to try
 ENEMY = "dummy1"       # dummy1 / theinsatiable / aeonglass
 ENERGY = 3             # raised to the card's cost when it costs more
 ENEMY_HP = 500         # nothing dies by accident; "enemy at 1 HP" is where it does
@@ -189,6 +190,9 @@ def sanity(c, phase, fails):
             fails.append("%s: %s block below zero (%d)" % (phase, u.unit_id, u.block))
         if u in c.allies and u.energy < 0:
             fails.append("%s: %s energy below zero (%d)" % (phase, u.unit_id, u.energy))
+        if u in c.allies and len(u.hand) > u.HAND_LIMIT:
+            fails.append("%s: %s holds %d cards, over the hand limit"
+                         % (phase, u.unit_id, len(u.hand)))
     enemies_up = any(e.is_alive() for e in c.enemies)
     allies_up = any(a.is_alive() for a in c.allies)
     if c.result is CombatResult.VICTORY and enemies_up:
@@ -225,7 +229,8 @@ def answer_all(c, me, first=None):
         uid, ask = next(iter(c.pending_choices.items()))
         pick = first if (uid == me.unit_id and first is not None) else 0
         first = None if uid == me.unit_id else first
-        answered.append("%s: %s -> %s" % (uid, ask.prompt, ask.options[pick]))
+        answered.append("%s: %s -> %s" % (uid, ask.prompt, "stop" if pick == PendingChoice.STOP
+                                          else ask.options[pick]))
         c.answer_choice(c.find_unit(uid), pick)
     return answered
 
@@ -263,7 +268,7 @@ def run_row(row, card_id, energy, answer=None):
     if row.setup is not None:
         row.setup(c, me, foe, ref)
     target = row.target(c) if row.target is not None else None
-    result = {"phases": {}, "fails": [], "notes": [], "options": None}
+    result = {"phases": {}, "fails": [], "notes": [], "options": None, "can_stop": False}
     fails = result["fails"]
 
     # ---- an illegal row: it has to be refused, and change nothing --------
@@ -317,8 +322,10 @@ def run_row(row, card_id, energy, answer=None):
 
     if played:
         if me.unit_id in c.pending_choices and answer is None:
-            # The caller runs this row once per option instead.
+            # The caller runs this row once per option instead (and once
+            # more stopping, for an "up to N" question).
             result["options"] = list(c.pending_choices[me.unit_id].options)
+            result["can_stop"] = c.pending_choices[me.unit_id].can_stop
             return result
         try:
             answered = answer_all(c, me, first=answer)
@@ -511,24 +518,31 @@ def rows_for(card_id, card):
     return rows, ill
 
 
-def choice_rows(card, na, ne, aim):
-    """Illegal moves that only exist once a card has asked a question."""
+def choice_rows(card, na, ne, aim, upgraded=False, can_stop=False):
+    """Illegal moves that only exist once a card has asked a question -
+    built from the version that asked (True Grit asks only when upgraded)."""
     def play(c, me, ref, target):
         c.play_card(me, 0, target=target)
 
     def another(c, me, ref, target):
         c.play_card(me, 0, target=c.enemies[0])
 
-    return [
-        Row("play another card before answering", na, ne, target=aim, pre=play,
+    rows = [
+        Row("play another card before answering", na, ne, upgraded, target=aim, pre=play,
             illegal=another, expect=(ValueError, "has a choice to answer first")),
-        Row("end the turn before answering", na, ne, target=aim, pre=play,
+        Row("end the turn before answering", na, ne, upgraded, target=aim, pre=play,
             illegal=lambda c, me, ref, target: c.end_player_turn(),
             expect=(RuntimeError, "Still waiting on a choice")),
-        Row("answer an option that does not exist", na, ne, target=aim, pre=play,
+        Row("answer an option that does not exist", na, ne, upgraded, target=aim, pre=play,
             illegal=lambda c, me, ref, target: c.answer_choice(me, 99),
             expect=(IndexError, "out of range")),
     ]
+    if not can_stop:
+        rows.append(Row("stop a question that needs an answer", na, ne, upgraded, target=aim,
+                        pre=play,
+                        illegal=lambda c, me, ref, target: c.answer_choice(me, PendingChoice.STOP),
+                        expect=(ValueError, "cannot be stopped")))
+    return rows
 
 
 def run_matrix(card_id):
@@ -555,10 +569,14 @@ def run_matrix(card_id):
         if out["options"] is not None:
             if not asked_once:
                 asked_once = True
-                illegal.extend(choice_rows(card, row.allies, row.enemies, row.target))
+                illegal.extend(choice_rows(card, row.allies, row.enemies, row.target,
+                                           row.upgraded, out["can_stop"]))
             for i, option in enumerate(out["options"]):
                 forked = run_twice(row, answer=i)
                 results.append(("%s  choice[%d]=%s" % (row.name, i, option), forked))
+            if out["can_stop"]:
+                forked = run_twice(row, answer=PendingChoice.STOP)
+                results.append(("%s  choice[stop]" % row.name, forked))
         else:
             results.append((row.name, out))
     for row in illegal:

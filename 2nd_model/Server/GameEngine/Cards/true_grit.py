@@ -19,12 +19,15 @@ class TrueGrit(Card):
         )
 
     def get_effects(self, context):
-        # Picked here rather than in the resolver, so the card owns the choice.
-        hand = list(context.source.hand)
-        picked = [context.rng.choice(hand)] if hand else []
-        return [
-            InstantBlock(
-                source=context.source, target=context.source, amount=self.BLOCK),
-            InstantExhaust(
-                source=context.source, target=context.source, card_ids=picked),
-        ]
+        ally = context.source
+        effects = [InstantBlock(source=ally, target=ally, amount=self.BLOCK)]
+        if not ally.hand:
+            return effects
+        if not self.upgraded:
+            # The base printing says "at random", and means it.
+            effects.append(InstantExhaust(
+                source=ally, target=ally, card_ids=[context.rngs.card_selection.choice(ally.hand)]))
+            return effects
+        context.ask(ally, "Exhaust a card", lambda: list(ally.hand),
+                    lambda chosen: [InstantExhaust(source=ally, target=ally, card_ids=[chosen])])
+        return effects

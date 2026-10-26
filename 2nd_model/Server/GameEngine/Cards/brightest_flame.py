@@ -26,7 +26,7 @@ class BrightestFlame(Card):
             InstantEnergy(
                 source=context.source, target=context.source, amount=self.ENERGY),
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
             InstantMaxHpLoss(
                 source=context.source, target=context.source, amount=self.MAX_HP_LOSS),
         ]

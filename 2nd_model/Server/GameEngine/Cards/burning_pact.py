@@ -19,12 +19,15 @@ class BurningPact(Card):
         )
 
     def get_effects(self, context):
-        # Picked here rather than in the resolver, so the card owns the choice.
-        hand = list(context.source.hand)
-        picked = [context.rng.choice(hand)] if hand else []
-        return [
-            InstantExhaust(
-                source=context.source, target=context.source, card_ids=picked),
-            InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
-        ]
+        ally = context.source
+        draw = InstantDraw(source=ally, target=ally, amount=self.CARDS, rng=context.rngs.shuffle)
+        if not ally.hand:
+            return [draw]
+
+        # The draw belongs inside the answer: the game exhausts first, so the
+        # cards drawn cannot be the one exhausted.
+        def exhaust(chosen):
+            return [InstantExhaust(source=ally, target=ally, card_ids=[chosen]), draw]
+
+        context.ask(ally, "Exhaust a card", lambda: list(ally.hand), exhaust)
+        return []

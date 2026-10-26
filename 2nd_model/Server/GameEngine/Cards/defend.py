@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 class Defend(Card):
     BLOCK = 5
+    DEFEND_TAG = True               # Fasten adds to it
 
     def __init__(self):
         super().__init__(
@@ -21,6 +22,6 @@ class Defend(Card):
             InstantBlock(
                 source=context.source,
                 target=context.target,
-                amount=self.BLOCK
+                amount=self.base_block(context.source)
             )
         ]

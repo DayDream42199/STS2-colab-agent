@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from ._card_enums import CardType
 from ._card_properties import CardProperties
 from ._card_ref import bonus_of, cost_bump_of, is_upgraded, replay_of
 from ._upgrades import upgrade_for
@@ -15,6 +16,10 @@ class Card(ABC):
     # A card that would rather declare its own upgrade than sit in the shared
     # table in _upgrades.py.
     UPGRADE = None
+
+    # At the end of its owner's turn, if this is in the exhaust pile, it is
+    # played from there (Howl from Beyond).
+    PLAYS_FROM_EXHAUST_AT_TURN_END = False
 
     # While this sits in hand, nothing else may be played (Enthralled).
     MUST_PLAY_FIRST = False
@@ -106,11 +111,55 @@ class Card(ABC):
     def dynamic_cost(self, context):
         """What this card costs right now, before statuses and free plays.
 
-        Stomp and Midnight count things up and get cheaper. Everything else
+        Stomp counts things up and gets cheaper. Everything else
         costs what is printed on it, plus whatever this copy has had added."""
         if self.cost == self.X_COST:
             return self.cost
         return self.cost + self.cost_bump
+
+    def base_damage(self, ally):
+        """Per-hit damage before Strength, Weak and the target: the number on
+        the card in `ally`'s hand. None for a card that is not an Attack.
+
+        A card that works its damage out from the fight (Body Slam, Mind
+        Blast, ...) overrides this and reads it back when it plays, so what
+        the player is shown and what lands cannot drift apart. What depends on
+        the target (Bully's Vulnerable, Rend's debuffs) is left out, since no
+        target is chosen yet."""
+        if self.card_type is not CardType.ATTACK:
+            return None
+        return self.DAMAGE + self.bonus_damage
+
+    # Defend and Ultimate Defend - the cards the game tags CardTag.Defend.
+    # Fasten adds to their Block (FastenPower.ModifyBlockAdditive).
+    DEFEND_TAG = False
+
+    def base_block(self, ally):
+        """The Block this card gives `ally`, the player holding it, before
+        Dexterity, Frail and the like; None if it gives them none.
+
+        A card with a BLOCK constant gives that much, plus Fasten on a Defend.
+        One whose Block is worked out from the fight (Entrench, Stack...)
+        overrides this and reads it back when it plays, so what is shown and
+        what is gained cannot drift apart. Block decided by the target
+        (Mimic) is left out, since no target is chosen yet."""
+        block = getattr(self, "BLOCK", None)
+        if block is None:
+            return None
+        if self.DEFEND_TAG:
+            fasten = ally.get_status("fasten")
+            if fasten is not None:
+                block += fasten.amount
+        return block
+
+    def block_gains(self, ally):
+        """The Block gains one play gives `ally`, in order, as (amount,
+        powered) pairs before Dexterity and Frail; None if it gives none.
+        Usually one gain of base_block. Second Wind gains once per card it
+        exhausts, so Dexterity counts each time, and Entrench's gain is
+        unpowered - both as in the game. Combat.hand_blocks adds them up."""
+        block = self.base_block(ally)
+        return None if block is None else [(block, True)]
 
     @abstractmethod
     def get_effects(self, context):

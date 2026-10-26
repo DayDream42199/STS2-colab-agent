@@ -30,7 +30,7 @@ def play(c, ally, card_id, target=None):
     ally.hand = [card_id]
     return c.play_card(ally, 0, target=target)
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- what the pool is allowed to contain -----------------------------------
 pool = generatable_card_ids()

@@ -15,10 +15,19 @@ class Entrench(Card):
             target_type = TargetType.SELF
         )
 
-    def get_effects(self, context):
+    def base_block(self, ally):
         # Read live: doubling means granting again whatever we already hold.
+        return ally.block
+
+    def block_gains(self, ally):
+        # Unpowered in the game (ValueProp.Unpowered): Dexterity and Frail do
+        # not touch the doubling. Unmovable still does.
+        return [(self.base_block(ally), False)]
+
+    def get_effects(self, context):
         return [InstantBlock(
             source=context.source,
             target=context.source,
-            amount=context.source.block,
+            amount=self.base_block(context.source),
+            powered=False,
         )]

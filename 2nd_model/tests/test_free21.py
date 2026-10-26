@@ -41,7 +41,7 @@ def never_block(enemies):
         e.choose_intent()
         e.block = 0
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- the plain five --------------------------------------------------------
 c, a, es = fight(seed=2)
@@ -175,7 +175,11 @@ play(c, a[0], "defend")
 check("Fasten adds 4 to a Defend (5 + 4)", a[0].block == 9, a[0].block)
 a[0].block = 0
 play(c, a[0], "ultimate_defend")
-check("Fasten ignores non-Defend block cards", a[0].block == 11, a[0].block)
+# The game tags Ultimate Defend CardTag.Defend, so Fasten adds to it too.
+check("Fasten adds 4 to an Ultimate Defend (11 + 4)", a[0].block == 15, a[0].block)
+a[0].block = 0
+play(c, a[0], "shrug_it_off")
+check("Fasten ignores non-Defend block cards", a[0].block == 8, a[0].block)
 
 # --- powers ----------------------------------------------------------------
 c, a, es = fight(seed=8)

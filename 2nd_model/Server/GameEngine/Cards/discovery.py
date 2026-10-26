@@ -29,7 +29,7 @@ class Discovery(Card):
         pool = list(self.offer_from(context))
         if not pool:
             return []
-        offer = context.rng.sample(pool, min(self.OFFER, len(pool)))
+        offer = context.rngs.card_generation.sample(pool, min(self.OFFER, len(pool)))
 
         def take(chosen):
             ally.free_this_turn.append(chosen)

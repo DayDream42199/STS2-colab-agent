@@ -1,4 +1,5 @@
 from ._card import Card
+from ._card_ref import CardRef
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.InstantEffects.instant_move_card import InstantMoveCard
 from ..Effects.InstantEffects.instant_add_card import InstantAddCard
@@ -20,7 +21,6 @@ class PrimalForce(Card):
         # Imported here rather than at module level: the registry imports this
         # card, so importing it back at import time would deadlock.
         from ..Registry.card_registry import create_card
-
         attacks = [card_id for card_id in context.source.hand
                    if create_card(card_id).card_type is CardType.ATTACK]
         if not attacks:
@@ -31,8 +31,9 @@ class PrimalForce(Card):
             InstantMoveCard(
                 source=context.source, target=context.source, card_ids=attacks,
                 from_pile=InstantMoveCard.HAND, to_pile=InstantMoveCard.GONE),
+            # Upgraded, the rocks it makes are upgraded too.
             InstantAddCard(
                 source=context.source, target=context.source,
-                card_id="giant_rock", pile=InstantAddCard.HAND,
-                amount=len(attacks)),
+                card_id=CardRef("giant_rock", upgraded=self.upgraded),
+                pile=InstantAddCard.HAND, amount=len(attacks)),
         ]

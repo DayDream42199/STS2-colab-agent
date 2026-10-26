@@ -17,6 +17,10 @@ class Fasten(Card):
             target_type = TargetType.SELF
         )
 
+    def base_block(self, ally):
+        # BLOCK is what the power adds to Defends, not Block for the player.
+        return None
+
     def get_effects(self, context):
         return [FastenStatus(
             source=context.source, target=context.source, amount=self.BLOCK)]

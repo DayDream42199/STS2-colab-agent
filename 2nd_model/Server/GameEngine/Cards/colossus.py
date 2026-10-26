@@ -5,7 +5,7 @@ from ..Effects.StatusEffects.colossus_guard import ColossusGuard
 
 
 class Colossus(Card):
-    BLOCK = 4
+    BLOCK = 5
 
     def __init__(self):
         super().__init__(

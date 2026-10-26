@@ -144,6 +144,62 @@ check("three answers exhaust three cards and end the questions",
       len(p1.exhaust_pile) == 4 and not s.combat.pending_choices,
       (p1.exhaust_pile, s.combat.pending_choices))
 
+# --- "up to N" may stop early -------------------------------------------------
+# The game's Purity selects 0 to 3 (CardSelectorPrefs(prompt, 0, 3)), Neow's
+# Fury 0 to 2. option_index -1 is "stop"; any other question refuses it.
+STOP = -1
+s, p1, p2 = table()
+p1.hand = hand("purity", "strike", "defend", "bash")
+out = play(s, "sid1")
+_, ask = to(out, ServerMessage.CHOICE_REQUIRED.value)
+check("Purity's question says on the wire that it can be stopped",
+      ask is not None and ask["can_stop"] is True, ask)
+out = choose(s, "sid1", STOP)
+check("stopping straight away is not an error",
+      ServerMessage.ERROR.value not in kinds(out), kinds(out))
+check("and exhausts nothing but Purity itself, with no question left",
+      p1.exhaust_pile == ["purity"] and sorted(p1.hand) == ["bash", "defend", "strike"]
+      and not s.combat.pending_choices,
+      (p1.exhaust_pile, p1.hand, list(s.combat.pending_choices)))
+
+s, p1, p2 = table()
+p1.hand = hand("purity", "strike", "defend", "bash")
+play(s, "sid1")
+first = s.combat.pending_choices["p1"].options[0]
+choose(s, "sid1", 0)
+out = choose(s, "sid1", STOP)
+check("one pick then stop exhausts exactly that one card",
+      p1.exhaust_pile == ["purity", first] and len(p1.hand) == 2
+      and not s.combat.pending_choices,
+      (p1.exhaust_pile, p1.hand, list(s.combat.pending_choices)))
+
+s, p1, p2 = table()
+p1.hand = hand("neows_fury")
+p1.discard_pile = hand("strike", "defend", "bash")
+enemy_hp = s.combat.enemies[0].current_hp
+out = play(s, "sid1", 0, "e1")
+_, ask = to(out, ServerMessage.CHOICE_REQUIRED.value)
+check("Neow's Fury's question can be stopped too",
+      ask is not None and ask["can_stop"] is True, ask)
+choose(s, "sid1", STOP)
+check("stopping takes nothing back, and the 10 damage still lands",
+      p1.hand == [] and len(p1.discard_pile) == 3
+      and s.combat.enemies[0].current_hp == enemy_hp - 10,
+      (p1.hand, p1.discard_pile, enemy_hp - s.combat.enemies[0].current_hp))
+
+s, p1, p2 = table()
+p1.hand = hand("wish")
+p1.draw_pile = hand("bash", "defend", "strike")
+out = play(s, "sid1")
+_, ask = to(out, ServerMessage.CHOICE_REQUIRED.value)
+check("Wish's question cannot be stopped, and says so",
+      ask is not None and ask["can_stop"] is False, ask)
+out = choose(s, "sid1", STOP)
+check("so stopping it is refused", ServerMessage.ERROR.value in kinds(out),
+      to(out, ServerMessage.ERROR.value)[1])
+check("and the question is still open, nothing taken",
+      "p1" in s.combat.pending_choices and p1.hand == [], (p1.hand,))
+
 # --- two questions for one player, and one for the other ----------------------
 from GameEngine.Effects.StatusEffects.entropy import Entropy
 from GameEngine.Effects.StatusEffects.stratagem import Stratagem

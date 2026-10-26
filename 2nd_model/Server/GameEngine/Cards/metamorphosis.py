@@ -30,10 +30,10 @@ class Metamorphosis(Card):
             return []
         effects = []
         for _ in range(self.COUNT):
-            picked = context.rng.choice(pool)
+            picked = context.rngs.card_generation.choice(pool)
             # This combat, not this turn - these outlive the turn they arrive on.
             context.source.free_this_combat.append(picked)
             effects.append(InstantAddCard(
                 source=context.source, target=context.source,
-                card_id=picked, pile=InstantAddCard.DRAW, rng=context.rng))
+                card_id=picked, pile=InstantAddCard.DRAW, rng=context.rngs.shuffle))
         return effects

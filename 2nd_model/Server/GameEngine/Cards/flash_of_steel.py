@@ -23,5 +23,5 @@ class FlashOfSteel(Card):
         return [
             InstantDamage(source=context.source, target=context.target, amount=self.DAMAGE),
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
         ]

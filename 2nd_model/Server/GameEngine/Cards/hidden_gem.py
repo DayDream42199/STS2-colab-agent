@@ -26,4 +26,4 @@ class HiddenGem(Card):
             return []
         return [InstantGrantReplay(
             source=ally, target=ally,
-            card_refs=[context.rng.choice(candidates)], amount=self.REPLAY)]
+            card_refs=[context.rngs.card_selection.choice(candidates)], amount=self.REPLAY)]

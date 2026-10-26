@@ -42,7 +42,7 @@ def always_attack(enemies):
             e, "intent", {"type": "attack", "amount": 1})
         e.choose_intent()
 
-check("registry has 223 cards", len(known_card_ids()) == 223, len(known_card_ids()))
+check("registry has 219 cards", len(known_card_ids()) == 219, len(known_card_ids()))
 
 # --- Barricade -------------------------------------------------------------
 c, a, es = fight(seed=2)

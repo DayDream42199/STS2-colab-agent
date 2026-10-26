@@ -2,12 +2,14 @@ from ._status_effect import StatusEffect
 
 
 class Cruelty(StatusEffect):
-    """Vulnerable enemies take extra damage from us.
+    """Your attacks on a Vulnerable enemy count Vulnerable as `amount` percent
+    stronger: 1.5x becomes 1.75x with one Cruelty, 2x upgraded, and copies add
+    up (the game's CrueltyPower is a counter).
 
-    Sits on the attacker but keys off the defender - what `target` is for."""
-
-    BONUS = 0.25
-    DAMAGE_ORDER = StatusEffect.MULTIPLICATIVE
+    Only the holder's attacks - the game's Vulnerable reads Cruelty off the
+    attacker (dealer.GetPower<CrueltyPower>), not off the whole party. And it
+    is added to the multiplier, not multiplied after it. So this status only
+    carries the number; Vulnerable does the arithmetic."""
 
     def __init__(self, source, target, amount):
         super().__init__("cruelty")
@@ -17,8 +19,3 @@ class Cruelty(StatusEffect):
 
     def on_owner_turn_end(self):
         pass  # a power lasts the whole combat
-
-    def modify_outgoing_damage(self, amount, target=None):
-        if target is None or not target.get_status("vulnerable"):
-            return amount
-        return amount * (1 + self.BONUS)

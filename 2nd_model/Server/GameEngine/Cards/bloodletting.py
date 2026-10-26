@@ -13,8 +13,8 @@ class Bloodletting(Card):
             name = "Bloodletting",
             card_type = CardType.SKILL,
             card_class = CardClass.IRONCLAD,
-            rarity = CardRarity.UNCOMMON,
-            cost = 1,
+            rarity = CardRarity.COMMON,
+            cost = 0,
             target_type = TargetType.SELF
         )
 

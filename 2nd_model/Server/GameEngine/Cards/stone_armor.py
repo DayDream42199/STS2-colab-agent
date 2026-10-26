@@ -10,7 +10,7 @@ class StoneArmor(Card):
         super().__init__(
             card_id = "stone_armor",
             name = "Stone Armor",
-            card_type = CardType.SKILL,
+            card_type = CardType.POWER,
             card_class = CardClass.IRONCLAD,
             rarity = CardRarity.UNCOMMON,
             cost = 1,

@@ -23,5 +23,5 @@ class Finesse(Card):
         return [
             InstantBlock(source=context.source, target=context.source, amount=self.BLOCK),
             InstantDraw(source=context.source, target=context.source,
-                        amount=self.CARDS, rng=context.rng),
+                        amount=self.CARDS, rng=context.rngs.shuffle),
         ]

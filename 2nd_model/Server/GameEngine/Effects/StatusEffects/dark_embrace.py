@@ -21,4 +21,4 @@ class DarkEmbrace(StatusEffect):
         if context.target is not context.source:
             return None
         return [InstantDraw(source=context.source, target=context.source,
-                           amount=self.amount, rng=context.rng)]
+                           amount=self.amount, rng=context.rngs.shuffle)]

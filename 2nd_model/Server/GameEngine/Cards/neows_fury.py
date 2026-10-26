@@ -24,7 +24,16 @@ class NeowsFury(Card):
     def get_effects(self, context):
         ally = context.source
 
-        # "Up to 2", asked one at a time; fewer is fine when the pile is short.
+        # "Up to 2", asked one at a time; fewer is fine when the pile is short,
+        # and the player may stop at any point - the game allows 0 to 2. And
+        # never more than the hand has room for (min(2, 10 - hand), counted
+        # after the hit), so a full hand is offered nothing: read when each
+        # question is put, as the card taken before it may have filled the hand.
+        def options():
+            if len(ally.hand) >= ally.HAND_LIMIT:
+                return []
+            return [c for c in ally.discard_pile if c is not context.played]
+
         def ask(left):
             if left <= 0 or not ally.discard_pile:
                 return
@@ -38,7 +47,7 @@ class NeowsFury(Card):
 
             context.ask(ally,
                         f"Take a card from your Discard Pile ({left} left)",
-                        lambda: list(ally.discard_pile), take)
+                        options, take, can_stop=True)
 
         ask(self.COUNT)
         return [InstantDamage(

@@ -15,9 +15,13 @@ class GoldAxe(Card):
             target_type = TargetType.ENEMY
         )
 
+    def base_damage(self, ally):
+        # Cards played before this one: the count goes up after it resolves.
+        return ally.combat_count("cards_played")
+
     def get_effects(self, context):
         return [InstantDamage(
             source=context.source,
             target=context.target,
-            amount=context.source.combat_count("cards_played"),
+            amount=self.base_damage(context.source),
         )]

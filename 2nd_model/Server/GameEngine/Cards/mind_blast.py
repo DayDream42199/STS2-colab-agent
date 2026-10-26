@@ -17,9 +17,12 @@ class MindBlast(Card):
             properties = CardProperties(innate=True)
         )
 
+    def base_damage(self, ally):
+        return len(ally.draw_pile)
+
     def get_effects(self, context):
         return [InstantDamage(
             source=context.source,
             target=context.target,
-            amount=len(context.source.draw_pile),
+            amount=self.base_damage(context.source),
         )]

@@ -26,6 +26,6 @@ class CrimsonMantle(StatusEffect):
         return [
             InstantHpLoss(
                 source=context.source, target=context.source, amount=self.HP_LOSS),
-            InstantBlock(
+            InstantBlock(powered=False, card=False, 
                 source=context.source, target=context.source, amount=self.amount),
         ]

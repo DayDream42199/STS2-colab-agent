@@ -18,6 +18,7 @@ from ..Effects.InstantEffects.instant_grant_replay import InstantGrantReplay
 from ..Effects.InstantEffects.instant_raise_cost import InstantRaiseCost
 from ..Effects.StatusEffects._status_effect import StatusEffect
 from ..Cards._card_ref import new_ref, take
+from ..Units.Enemies._scripted import scaled_block
 
 
 class Resolver:
@@ -62,19 +63,29 @@ class Resolver:
         )
 
     @staticmethod
+    def damage_amount(source, target, amount, is_attack=True):
+        """What `amount` becomes between `source` and `target`, changing
+        nothing - so the same arithmetic resolves a hit, shows an enemy's
+        intent, and tells Thrash what a card in hand would deal. `target` None
+        counts the attacker's side only."""
+        if is_attack and source is not None:
+            for status in Resolver._ordered(source):
+                amount = status.modify_outgoing_damage(amount, target)
+        if target is not None:
+            for status in Resolver._ordered(target):
+                if is_attack or not status.ATTACKS_ONLY:
+                    amount = status.modify_incoming_damage(amount, source)
+        return max(0, int(amount))
+
+    @staticmethod
     def _resolve_instant_damage(effect):
         target = effect.target
-        amount = effect.amount
-
+        amount = Resolver.damage_amount(effect.source, target, effect.amount, effect.is_attack)
         if effect.is_attack:
-            for status in Resolver._ordered(effect.source):
-                amount = status.modify_outgoing_damage(amount, target)
-
-        for status in Resolver._ordered(target):
-            if effect.is_attack or not status.ATTACKS_ONLY:
-                amount = status.modify_incoming_damage(amount, effect.source)
-
-        amount = max(0, int(amount))
+            # A bonus that lasts one attack (Vigor) is spent now, not while the
+            # number is worked out - that arithmetic has to be safe to preview.
+            for status in list(effect.source.statuses.values()):
+                status.after_attack_dealt()
         was_alive = target.is_alive()
         dealt = target.take_damage(amount)
 
@@ -102,6 +113,7 @@ class Resolver:
         # here on. Handed a ref, the copies inherit its state - Anger+ adds
         # Anger+.
         added = [new_ref(effect.card_id) for _ in range(effect.amount)]
+        overflow = []
         if effect.pile == InstantAddCard.DRAW and effect.bottom:
             pile[0:0] = added            # drawn from the end, so index 0 is the bottom
         elif effect.pile == InstantAddCard.DRAW and effect.rng is not None:
@@ -110,9 +122,14 @@ class Resolver:
             # puts a card on top, and that has to stay on top.
             for card_id in added:
                 pile.insert(effect.rng.randint(0, len(pile)), card_id)
+        elif effect.pile == InstantAddCard.HAND:
+            room = Resolver._hand_room(effect.target)
+            pile.extend(added[:room])
+            overflow = added[room:]
+            effect.target.discard_pile.extend(overflow)
         else:
             pile.extend(added)
-        return {
+        result = {
             "effect_id": effect.effect_id,
             "source_id": effect.source.unit_id,
             "target_id": effect.target.unit_id,
@@ -120,6 +137,17 @@ class Resolver:
             "pile": effect.pile,
             "amount": effect.amount,
         }
+        if overflow:
+            # The copies that went to the discard pile, not the hand.
+            result["to_discard"] = overflow
+        return result
+
+    @staticmethod
+    def _hand_room(unit):
+        """How many more cards `unit`'s hand takes. A card arriving at a full
+        hand goes to the discard pile instead, one card at a time - the game's
+        CardPileCmd.Add (isFullHandAdd). Drawing stops at the same limit."""
+        return max(0, unit.HAND_LIMIT - len(unit.hand))
 
     @staticmethod
     def _resolve_instant_move_card(effect):
@@ -130,17 +158,26 @@ class Resolver:
         source_pile = None if held else getattr(target, effect.from_pile)
         gone = effect.to_pile == InstantMoveCard.GONE
         dest_pile = None if gone else getattr(target, effect.to_pile)
-        moved = []
+        moved, overflow = [], []
         for card_id in effect.card_ids:
             if not held and not take(source_pile, card_id):
                 continue
-            if not gone:
-                if effect.to_pile == InstantMoveCard.DRAW and effect.to_top:
-                    dest_pile.append(card_id)   # drawn from the end
+            if effect.to_pile == InstantMoveCard.HAND and Resolver._hand_room(target) <= 0:
+                # Full hand: it lands in the discard pile instead (Wish,
+                # Anointed, Bolas coming back), newest last.
+                target.discard_pile.append(card_id)
+                overflow.append(card_id)
+            elif not gone:
+                if effect.to_pile == InstantMoveCard.DRAW and not effect.to_top:
+                    dest_pile.insert(0, card_id)   # the bottom: drawn from the end
                 else:
-                    dest_pile.insert(0, card_id)
+                    # The top of the draw pile, or the end of any other pile:
+                    # the game's CardPileCmd.Add puts a card at the bottom
+                    # (index -1) unless told otherwise - the right end of the
+                    # hand, the newest of the discard and exhaust piles.
+                    dest_pile.append(card_id)
             moved.append(card_id)
-        return {
+        result = {
             "effect_id": effect.effect_id,
             "source_id": effect.source.unit_id,
             "target_id": target.unit_id,
@@ -149,6 +186,10 @@ class Resolver:
             "from_pile": effect.from_pile,
             "to_pile": effect.to_pile,
         }
+        if overflow:
+            # Which of `card_ids` went to the discard pile, not the hand.
+            result["to_discard"] = overflow
+        return result
 
     @staticmethod
     def _resolve_instant_exhaust(effect):
@@ -316,8 +357,12 @@ class Resolver:
 
     @staticmethod
     def _resolve_instant_energy(effect):
-        if effect.amount >= 0:
-            effect.target.gain_energy(effect.amount)
+        amount = effect.amount
+        if amount >= 0:
+            # No Energy Gain zeroes a gain; it never touches a loss (Void).
+            for status in list(effect.target.statuses.values()):
+                amount = status.modify_energy_gain(amount)
+            effect.target.gain_energy(amount)
         else:
             # Void takes energy away. gain_energy ignores anything <= 0, and
             # spend_energy raises when you cannot afford it, so neither is the
@@ -327,7 +372,7 @@ class Resolver:
             "effect_id": effect.effect_id,
             "source_id": effect.source.unit_id,
             "target_id": effect.target.unit_id,
-            "amount": effect.amount,
+            "amount": amount,
             "energy": effect.target.energy,
         }
 
@@ -344,18 +389,40 @@ class Resolver:
         }
 
     @staticmethod
+    def block_amount(target, amount, powered=True, card=True, source=None, play_id=None):
+        """What `amount` Block becomes when `target` gains it, changing
+        nothing - so the same arithmetic gains the Block and shows a card's
+        Block in hand (Combat.hand_blocks). Unpowered Block (Entrench) skips
+        Dexterity and Frail; Block a power grants on its own (`card` False,
+        Toric Toughness's later turns) skips them and Unmovable - as in the
+        game. Block from a card is then put to the statuses of `source`, the
+        card's owner, with the play it came from: Unmovable.
+
+        Co-op scaling for an enemy's own Block, before Dexterity and the
+        multipliers, as in the reference. Allies have no block_scale. Rounded
+        like the reference, not floored: Reload's 3 at three players is
+        3 x 3.3 = 9.9, and the reference blocks 10."""
+        amount = scaled_block(amount, getattr(target, "block_scale", 1.0))
+        for status in Resolver._ordered(target):
+            if status.BLOCK_POWERED_ONLY and not (powered and card):
+                continue
+            amount = status.modify_block_gained(amount)
+        if card and source is not None:
+            for status in Resolver._ordered(source):
+                amount = status.modify_card_block(amount, target, play_id)
+        return max(0, int(amount))
+
+    @staticmethod
     def _resolve_instant_block(effect):
         target = effect.target
-        # Co-op scaling for an enemy's own Block, before Dexterity and the
-        # multipliers, as in the reference. Allies have no block_scale. Rounded
-        # like the reference, not floored: Reload's 3 at three players is
-        # 3 x 3.3 = 9.9, and the reference blocks 10.
-        scale = getattr(target, "block_scale", 1.0)
-        amount = round(effect.amount * scale) if scale != 1.0 else effect.amount
-        for status in Resolver._ordered(target):
-            amount = status.modify_block_gained(amount)
-        amount = max(0, int(amount))
+        card = getattr(effect, "card", True)
+        play_id = getattr(effect, "play_id", None)
+        amount = Resolver.block_amount(target, effect.amount, getattr(effect, "powered", True),
+                                       card, effect.source, play_id)
         target.add_block(amount)
+        if card and amount > 0:
+            # On record only when some was gained, as the game's history.
+            target.card_blocks.append(play_id)
         return {
             "effect_id": effect.effect_id,
             "source_id": effect.source.unit_id,
@@ -369,7 +436,25 @@ class Resolver:
         target = effect.target
         if not target.is_alive():
             return None
+        artifact = target.get_status("artifact")
+        if effect.IS_DEBUFF and artifact is not None and artifact.amount > 0:
+            # Artifact eats the debuff, one charge each. Nothing lands, so
+            # nothing that reacts to a debuff being applied should fire.
+            artifact.amount -= 1
+            if artifact.amount <= 0:
+                target.remove_status("artifact")
+            return {
+                "effect_id": effect.effect_id,
+                "source_id": effect.source.unit_id,
+                "target_id": target.unit_id,
+                "amount": 0,
+                "blocked_by": "artifact",
+            }
         target.apply_status(copy.copy(effect))
+        held = target.statuses[effect.effect_id]
+        if held.TICKS_AFTER_ENEMY_TURN and getattr(target, "hand", None) is not None:
+            # A player's Vulnerable / Weak / Frail skips its next count-down.
+            held.skip_next_tick = True
         return {
             "effect_id": effect.effect_id,
             "source_id": effect.source.unit_id,

@@ -1,4 +1,4 @@
-from ._scripted import ScriptedEnemy, Move
+from ._scripted import ScriptedEnemy, Move, players
 from ...Effects.InstantEffects.instant_damage import InstantDamage
 from ...Effects.InstantEffects.instant_add_card import InstantAddCard
 from ...Effects.StatusEffects.sandpit import Sandpit
@@ -9,8 +9,8 @@ class TheInsatiable(ScriptedEnemy):
     """Hive boss. Opens by liquifying the ground, then cycles through bites.
 
     Liquify gives every living player 4 Sandpit and six Frantic Escape: three
-    at the BOTTOM of the draw pile and three in the discard, as the reference
-    does - the escapes are not handed to you, you have to dig for them.
+    shuffled into the draw pile at random depths and three in the discard, as
+    the game does (CardPilePosition.Random) - you have to dig for them.
     """
 
     CATEGORY = "boss"
@@ -32,22 +32,19 @@ class TheInsatiable(ScriptedEnemy):
             effects.append(Sandpit(source=self, target=ally, amount=self.SANDPIT))
             effects.append(InstantAddCard(
                 source=self, target=ally, card_id="frantic_escape",
-                pile=InstantAddCard.DRAW, amount=self.ESCAPES_EACH, bottom=True))
+                pile=InstantAddCard.DRAW, amount=self.ESCAPES_EACH, rng=context.rngs.shuffle))
             effects.append(InstantAddCard(
                 source=self, target=ally, card_id="frantic_escape",
                 pile=InstantAddCard.DISCARD, amount=self.ESCAPES_EACH))
         return effects
 
     def _thrash(self, context):
-        if context.target is None:
-            return []
-        return [InstantDamage(source=self, target=context.target, amount=self.THRASH)
-                for _ in range(self.THRASH_HITS)]
+        return [InstantDamage(source=self, target=p, amount=self.THRASH)
+                for _ in range(self.THRASH_HITS) for p in players(context)]
 
     def _lunge(self, context):
-        if context.target is None:
-            return []
-        return [InstantDamage(source=self, target=context.target, amount=self.LUNGE)]
+        return [InstantDamage(source=self, target=p, amount=self.LUNGE)
+                for p in players(context)]
 
     def _salivate(self, context):
         return [Strength(source=self, target=self, amount=self.SALIVATE)]

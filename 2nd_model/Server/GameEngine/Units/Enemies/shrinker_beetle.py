@@ -3,13 +3,14 @@ from ...Effects.StatusEffects.shrink import Shrink
 
 
 class ShrinkerBeetle(ScriptedEnemy):
-    """Act 1. Opens by Shrinking one player (Attacks deal 30% less for 3
-    turns, gone if the Beetle dies), then alternates Chomp (7) and Stomp (13)."""
+    """Act 1. Opens by Shrinking every player - their Attacks deal 30% less
+    for as long as the Beetle lives (the game applies -1, which never wears
+    off) - then alternates Chomp (7) and Stomp (13)."""
 
     NAME = "Shrinker Beetle"
     HP_RANGE = (38, 40)
 
-    SHRINK = 3
+    SHRINK = -1                  # permanent: see Shrink
     CHOMP = 7
     STOMP = 13
 

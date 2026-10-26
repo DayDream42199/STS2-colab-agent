@@ -25,6 +25,6 @@ class Juggernaut(StatusEffect):
             return None
         return [InstantDamage(
             source=context.source,
-            target=context.rng.choice(alive),
+            target=context.rngs.targets.choice(alive),
             amount=self.amount,
         )]

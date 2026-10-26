@@ -5,6 +5,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 class UltimateDefend(Card):
     BLOCK = 11
+    DEFEND_TAG = True               # the game tags it Defend, so Fasten adds to it
 
     def __init__(self):
         super().__init__(
@@ -19,4 +20,5 @@ class UltimateDefend(Card):
 
     def get_effects(self, context):
         return [InstantBlock(
-            source=context.source, target=context.source, amount=self.BLOCK)]
+            source=context.source, target=context.source,
+            amount=self.base_block(context.source))]

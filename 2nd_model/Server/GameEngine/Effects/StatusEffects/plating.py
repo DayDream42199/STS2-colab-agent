@@ -24,5 +24,5 @@ class Plating(StatusEffect):
             return None
         block = self.amount
         self.amount -= 1
-        return [InstantBlock(
+        return [InstantBlock(powered=False, card=False, 
             source=context.source, target=context.source, amount=block)]

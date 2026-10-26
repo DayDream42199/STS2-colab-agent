@@ -16,11 +16,8 @@ class Havoc(Card):
         )
 
     def get_effects(self, context):
-        draw = context.source.draw_pile
-        if not draw:
-            return []
-        # The pile is drawn from the end, so the last entry is the top card.
+        # "The top card", picked when it resolves: Combat shuffles the discard
+        # in first if the draw pile is empty, as the game does.
         return [InstantPlayCard(
-            source=context.source, target=context.source,
-            card_id=draw[-1], from_pile=InstantPlayCard.DRAW,
-            force_exhaust=True)]
+            source=context.source, target=context.source, card_id=None,
+            from_pile=InstantPlayCard.DRAW, count=1, force_exhaust=True)]

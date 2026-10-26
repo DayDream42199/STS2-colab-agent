@@ -23,7 +23,7 @@ class SeekerStrike(Card):
         ally = context.source
         draw = list(ally.draw_pile)
         if draw:
-            offer = context.rng.sample(draw, min(self.OFFER, len(draw)))
+            offer = context.rngs.card_selection.sample(draw, min(self.OFFER, len(draw)))
 
             def take(chosen):
                 return [InstantMoveCard(

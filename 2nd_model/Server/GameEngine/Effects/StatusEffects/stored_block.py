@@ -24,5 +24,5 @@ class StoredBlock(StatusEffect):
             return None
         block = self.amount
         self.amount = 0  # spent; the next tick removes it
-        return [InstantBlock(
+        return [InstantBlock(powered=False, card=False, 
             source=context.source, target=context.source, amount=block)]

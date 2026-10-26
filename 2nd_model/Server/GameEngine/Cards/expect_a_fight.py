@@ -1,11 +1,15 @@
 from ._card import Card
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
-from ..Effects.InstantEffects.instant_block import InstantBlock
+from ..Effects.InstantEffects.instant_energy import InstantEnergy
+from ..Effects.StatusEffects.no_energy_gain import NoEnergyGain
 
 
 class ExpectAFight(Card):
-    BLOCK = 15
-    EXTRA_PER_STRENGTH = 5
+    """Gain 1 Energy for each Attack in your Hand. You cannot gain additional
+    Energy this turn. (The beta version gave Block per Strength; the game
+    replaced it.)"""
+
+    ENERGY_PER_ATTACK = 1
 
     def __init__(self):
         super().__init__(
@@ -19,10 +23,12 @@ class ExpectAFight(Card):
         )
 
     def get_effects(self, context):
-        strength = context.source.get_status("strength")
-        stacks = strength.amount if strength else 0
-        return [InstantBlock(
-            source=context.source,
-            target=context.source,
-            amount=self.BLOCK + self.EXTRA_PER_STRENGTH * stacks,
-        )]
+        from ..Registry.card_registry import create_card
+        ally = context.source
+        attacks = sum(1 for ref in ally.hand
+                      if create_card(ref).card_type is CardType.ATTACK)
+        # The Energy first, then the lock: the lock is on energy gained after.
+        return [
+            InstantEnergy(source=ally, target=ally, amount=self.ENERGY_PER_ATTACK * attacks),
+            NoEnergyGain(source=ally, target=ally),
+        ]

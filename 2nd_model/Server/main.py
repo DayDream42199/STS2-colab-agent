@@ -1,9 +1,13 @@
 import time
+import traceback
+from os import path as _os_path
 
 import config
 from Network.network import Server
 from Network.enums import NetworkEvent
 from session import Session, BROADCAST
+from plugin_host import load_plugin
+from combat_log import CombatLog
 
 try:
     from GameEngine.Combat.combat import Combat
@@ -18,7 +22,13 @@ def main():
         )
 
     server = Server()
-    session = Session(combat_factory=Combat, required_players=config.REQUIRED_PLAYERS)
+    # Optional: with no plugin file the game runs as usual, player format only.
+    log_dir = getattr(config, "LOG_DIR", None)
+    session = Session(combat_factory=Combat, required_players=config.REQUIRED_PLAYERS,
+                      plugin=load_plugin(getattr(config, "PLUGIN", None)),
+                      combat_log=CombatLog(log_dir) if log_dir else None)
+    if log_dir:
+        print(f"Logging the fight to {_os_path.abspath(log_dir)}")
 
     server.start(config.HOST, config.PORT)
 
@@ -28,7 +38,14 @@ def main():
             if event is None:
                 time.sleep(config.POLL_INTERVAL)
                 continue
-            if not handle_event(server, session, event):
+            try:
+                keep_going = handle_event(server, session, event)
+            except Exception:
+                # The session answers its own errors; this is the last net,
+                # so one bad event never stops the server.
+                traceback.print_exc()
+                keep_going = True
+            if not keep_going:
                 break
     except KeyboardInterrupt:
         print("Shutting down.")

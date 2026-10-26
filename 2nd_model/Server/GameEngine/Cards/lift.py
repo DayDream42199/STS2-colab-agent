@@ -17,6 +17,10 @@ class Lift(Card):
             target_type = TargetType.ALLY
         )
 
+    def base_block(self, ally):
+        # All of it goes to the teammate.
+        return None
+
     def get_effects(self, context):
         return [InstantBlock(
             source=context.source, target=context.target, amount=self.BLOCK)]

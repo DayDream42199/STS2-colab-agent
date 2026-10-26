@@ -26,7 +26,7 @@ class InfernalBlade(Card):
             card_class=CardClass.IRONCLAD, card_type=CardType.ATTACK)
         if not pool:
             return []
-        picked = context.rng.choice(pool)
+        picked = context.rngs.card_generation.choice(pool)
         # Granted here rather than through an effect, the way Equilibrium sets
         # retain_hand: the card already knows which id it is adding.
         context.source.free_this_turn.append(picked)

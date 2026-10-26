@@ -1,4 +1,5 @@
 from ..Units.Allies.test_ally_1 import TestAlly1
+from ..Units.Allies.ironclad import Ironclad
 from ..Units.Enemies.dummy_1 import Dummy1
 from ..Units.Enemies.the_insatiable import TheInsatiable
 from ..Units.Enemies.aeonglass import Aeonglass
@@ -16,6 +17,14 @@ from ..Units.Enemies.vine_shambler import VineShambler
 from ..Units.Enemies.shrinker_beetle import ShrinkerBeetle
 from ..Units.Enemies.mawler import Mawler
 from ..Units.Enemies.cubex_construct import CubexConstruct
+from ..Units.Enemies.inklet import Inklet
+from ..Units.Enemies.fogmog import Fogmog, EyeWithTeeth
+from ..Units.Enemies.phrog_parasite import PhrogParasite
+from ..Units.Enemies.bygone_effigy import BygoneEffigy
+from ..Units.Enemies.byrdonis import Byrdonis
+from ..Units.Enemies.the_kin import KinPriest, KinFollower
+from ..Units.Enemies.vantom import Vantom
+from ..Units.Enemies.ceremonial_beast import CeremonialBeast
 
 _ALLY_CLASSES = {}
 _ENEMY_CLASSES = {}
@@ -54,6 +63,7 @@ def known_enemy_type_ids():
 
 
 register_ally(TestAlly1)
+register_ally(Ironclad)
 register_enemy(Dummy1)
 register_enemy(TheInsatiable)
 register_enemy(Aeonglass)
@@ -62,5 +72,6 @@ for _enemy in (LeafSlimeSmall, LeafSlimeMedium, TwigSlimeSmall, TwigSlimeMedium,
                Nibbit, SnappingJaxfruit, FuzzyWurmCrawler,
                AssassinRaider, AxeRaider, BruteRaider, CrossbowRaider, TrackerRaider,
                Flyconid, SlitheringStrangler, VineShambler, ShrinkerBeetle, Mawler,
-               CubexConstruct):
+               CubexConstruct, Inklet, Fogmog, EyeWithTeeth, PhrogParasite, BygoneEffigy,
+               Byrdonis, KinPriest, KinFollower, Vantom, CeremonialBeast):
     register_enemy(_enemy)

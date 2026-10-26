@@ -22,7 +22,7 @@ class Catastrophe(Card):
         if not draw:
             return []
         picked = (draw if len(draw) <= self.COUNT
-                  else context.rng.sample(draw, self.COUNT))
+                  else context.rngs.shuffle.sample(draw, self.COUNT))
         return [
             InstantPlayCard(source=context.source, target=context.source,
                             card_id=card_id, from_pile=InstantPlayCard.DRAW)

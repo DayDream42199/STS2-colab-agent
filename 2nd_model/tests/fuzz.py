@@ -36,6 +36,14 @@ def one_fight(seed, ask_players, turns=12, deck_size=15):
     refusals = collections.Counter()
     plays = answers = 0
 
+    def hands_fit():
+        # A card reaching a full hand goes to the discard pile, as in the
+        # game, so no hand is ever above the limit. Raised as a crash.
+        for a in allies:
+            if len(a.hand) > a.HAND_LIMIT:
+                raise AssertionError("%s holds %d cards, over the %d limit"
+                                     % (a.unit_id, len(a.hand), a.HAND_LIMIT))
+
     def answer_all():
         nonlocal answers
         guard = 0
@@ -71,11 +79,14 @@ def one_fight(seed, ask_players, turns=12, deck_size=15):
                     plays += 1
                 except REFUSAL as e:
                     refusals[str(e)] += 1
+                hands_fit()
         answer_all()
+        hands_fit()
         if c.is_over():
             break
         c.end_player_turn()
         answer_all()
+        hands_fit()
     json.dumps(c.to_dict())
     return plays, answers, refusals, c
 

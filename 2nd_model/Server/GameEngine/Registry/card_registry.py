@@ -93,7 +93,6 @@ from ..Cards.nostalgia import Nostalgia
 from ..Cards.juggling import Juggling
 from ..Cards.void import Void
 from ..Cards.stomp import Stomp
-from ..Cards.midnight import Midnight
 from ..Cards.unrelenting import Unrelenting
 from ..Cards.corruption import Corruption
 from ..Cards.enlightenment import Enlightenment
@@ -125,7 +124,6 @@ from ..Cards.panache import Panache
 from ..Cards.automation import Automation
 from ..Cards.unmovable import Unmovable
 from ..Cards.anger import Anger
-from ..Cards.outrage import Outrage
 from ..Cards.tremble import Tremble
 from ..Cards.impervious import Impervious
 from ..Cards.forgotten_ritual import ForgottenRitual
@@ -165,7 +163,6 @@ from ..Cards.toxic import Toxic
 from ..Cards.wither import Wither
 from ..Cards.wound import Wound
 from ..Cards.believe_in_you import BelieveInYou
-from ..Cards.blaze import Blaze
 from ..Cards.blood_wall import BloodWall
 from ..Cards.bloodletting import Bloodletting
 from ..Cards.bludgeon import Bludgeon
@@ -207,7 +204,6 @@ from ..Cards.normality import Normality
 from ..Cards.mind_rot import MindRot
 from ..Cards.waste_away import WasteAway
 from ..Cards.discovery import Discovery
-from ..Cards.abundance import Abundance
 from ..Cards.dual_wield import DualWield
 from ..Cards.seeker_strike import SeekerStrike
 from ..Cards.thinking_ahead import ThinkingAhead
@@ -291,16 +287,16 @@ for _card_class in (
     Calamity, HelloWorld, Entropy, JackOfAllTrades, Stoke, InfernalBlade, Distraction, Jackpot, Metamorphosis,
     Barricade, Whistle, BattleTrance, Pillage, Rend, Scrawl,
     Havoc, BeatDown, Catastrophe, HowlFromBeyond, OneTwoPunch, TagTeam, Rebound, Mayhem, Stampede, Hellraiser, Nostalgia, Juggling, Void,
-    Stomp, Midnight, Unrelenting, Corruption, Enlightenment, Whirlwind, Volley, Cascade,
+    Stomp, Unrelenting, Corruption, Enlightenment, Whirlwind, Volley, Cascade,
     GoldAxe, TearAsunder, GangUp,
     Fisticuffs, Omnislice, Feed,
     AshenStrike, PactsEnd, Cinder, TrueGrit, BurningPact, Brand, SecondWind, FiendFire, DrumOfBattle,
     Spite, EvilEye, Colossus, Cruelty, Tank, Knockdown, Panache, Automation, Unmovable,
-    Anger, Outrage, Tremble, Impervious, ForgottenRitual, Offering, Bully, Dismantle, MoltenFist, Dominate, ExpectAFight, DemonicShield, NotYet, Mangle, Relax, Apparition, BrightestFlame,
+    Anger, Tremble, Impervious, ForgottenRitual, Offering, Bully, Dismantle, MoltenFist, Dominate, ExpectAFight, DemonicShield, NotYet, Mangle, Relax, Apparition, BrightestFlame,
     ByrdSwoop, Peck, Squash, Exterminate, RipAndTear, Entrench, Stack, FeedingFrenzy, Caltrops, ToricToughness, Outmaneuver,
     GiantRock,
     Beckon, Burn, Dazed, Debris, Disintegration, Infection, Slimed, Soot, Toxic, Wither, Wound,
-    BelieveInYou, Blaze, BloodWall, Bloodletting, Bludgeon,
+    BelieveInYou, BloodWall, Bloodletting, Bludgeon,
     BodySlam, Break, Breakthrough, Conflagration, Coordinate,
     FightMe, Hemokinesis, HuddleUp, Inflame, IronWave, Lift, Mimic,
     PerfectedStrike, PommelStrike, SetupStrike, ShrugItOff,
@@ -308,7 +304,7 @@ for _card_class in (
     Rampage, Maul, Thrash, Bolas, ThrummingHatchet, Armaments, Apotheosis, Aggression,
     HiddenGem, Clash, Enthralled, Intercept,
     Sloth, Normality, MindRot, WasteAway,
-    Discovery, Abundance, DualWield, SeekerStrike, ThinkingAhead, Stratagem,
+    Discovery, DualWield, SeekerStrike, ThinkingAhead, Stratagem,
     FranticEscape, Splash, *MAD_SCIENCE,
 ):
     register_card(_card_class)

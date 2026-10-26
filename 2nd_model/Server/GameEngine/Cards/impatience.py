@@ -25,4 +25,4 @@ class Impatience(Card):
             if create_card(card_id).card_type is CardType.ATTACK:
                 return []
         return [InstantDraw(source=context.source, target=context.source,
-                            amount=self.CARDS, rng=context.rng)]
+                            amount=self.CARDS, rng=context.rngs.shuffle)]

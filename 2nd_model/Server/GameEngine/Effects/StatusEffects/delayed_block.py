@@ -4,18 +4,27 @@ from ..InstantEffects.instant_block import InstantBlock
 
 
 class DelayedBlock(StatusEffect):
-    """Grant Block at the start of each of the next `amount` turns.
+    """Toric Toughness: at the start of each of the next `amount` turns, gain
+    again the Block the card gained when it was played.
 
-    `amount` is turns remaining, not Block, and counts down on use so the
-    turn it was played on does not burn a charge."""
+    As the game's ToricToughnessPower: the Block is what was actually gained
+    (after Dexterity and Frail, so 7 for an upgraded card), and gaining it
+    again is unpowered and not from a card - Dexterity, Frail and Unmovable
+    leave it alone this time. Each play is its own grant (the power is
+    Instanced), so two plays give both Blocks, each for its own turns.
+    `amount` is the turns left across all grants, which is what is shown."""
 
-    BLOCK = 5
-
-    def __init__(self, source, target, amount):
+    def __init__(self, source, target, amount, block=0):
         super().__init__("delayed_block")
         self.source = source
         self.target = target
+        # [Block, turns left] per play.
+        self.grants = [[block, amount]]
         self.amount = amount
+
+    def absorb(self, other):
+        self.grants.extend(other.grants)
+        self.amount = sum(turns for _, turns in self.grants)
 
     def on_owner_turn_end(self):
         pass  # counted down on use, not on the turn tick
@@ -23,8 +32,13 @@ class DelayedBlock(StatusEffect):
     def on_event(self, event, context):
         if event is not GameEvent.TURN_START:
             return None
-        if context.target is not context.source or self.amount <= 0:
+        if context.target is not context.source or not self.grants:
             return None
-        self.amount -= 1
-        return [InstantBlock(
-            source=context.source, target=context.source, amount=self.BLOCK)]
+        effects = [InstantBlock(source=context.source, target=context.source,
+                                amount=block, powered=False, card=False)
+                   for block, _ in self.grants if block > 0]
+        for grant in self.grants:
+            grant[1] -= 1
+        self.grants = [grant for grant in self.grants if grant[1] > 0]
+        self.amount = sum(turns for _, turns in self.grants)
+        return effects

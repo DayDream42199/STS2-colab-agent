@@ -17,9 +17,13 @@ class EvilEye(Card):
             target_type = TargetType.SELF
         )
 
-    def get_effects(self, context):
+    def base_block(self, ally):
         total = self.BLOCK
-        if context.source.turn_count("cards_exhausted"):
+        if ally.turn_count("cards_exhausted"):
             total += self.BLOCK
+        return total
+
+    def get_effects(self, context):
         return [InstantBlock(
-            source=context.source, target=context.source, amount=total)]
+            source=context.source, target=context.source,
+            amount=self.base_block(context.source))]

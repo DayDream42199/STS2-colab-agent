@@ -4,7 +4,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 from ..Effects.StatusEffects.vulnerable import Vulnerable
 
 class Taunt(Card):
-    BLOCK = 6
+    BLOCK = 7
     VULNERABLE = 1
 
     def __init__(self):
@@ -13,7 +13,7 @@ class Taunt(Card):
             name = "Taunt",
             card_type = CardType.SKILL,
             card_class = CardClass.IRONCLAD,
-            rarity = CardRarity.COMMON,
+            rarity = CardRarity.UNCOMMON,
             cost = 1,
             target_type = TargetType.ENEMY
         )

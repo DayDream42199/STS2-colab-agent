@@ -27,7 +27,7 @@ class RipAndTear(Card):
                 break
             effects.append(InstantDamage(
                 source=context.source,
-                target=context.rng.choice(alive),
+                target=context.rngs.targets.choice(alive),
                 amount=self.DAMAGE,
             ))
         return effects

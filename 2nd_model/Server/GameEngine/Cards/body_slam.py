@@ -14,10 +14,13 @@ class BodySlam(Card):
             target_type = TargetType.ENEMY
         )
 
-    def get_effects(self, context):
+    def base_damage(self, ally):
         # Damage is read off live state at play time, not fixed on the card.
+        return ally.block
+
+    def get_effects(self, context):
         return [InstantDamage(
             source=context.source,
             target=context.target,
-            amount=context.source.block,
+            amount=self.base_damage(context.source),
         )]
