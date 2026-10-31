@@ -8,6 +8,7 @@ class FranticEscape(Card):
     """The Insatiable's status card: buy a turn, and pay more for the next one.
 
     Unlike the other status cards it is playable - playing it is the point."""
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
 
     TURNS = 1
     COST_RISE = 1

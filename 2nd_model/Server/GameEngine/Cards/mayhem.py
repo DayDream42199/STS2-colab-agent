@@ -10,7 +10,7 @@ class Mayhem(Card):
             name = "Mayhem",
             card_type = CardType.POWER,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 2,
             target_type = TargetType.SELF
         )

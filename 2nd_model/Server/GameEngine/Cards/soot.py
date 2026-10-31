@@ -4,6 +4,7 @@ from ._card_properties import CardProperties
 
 
 class Soot(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     def __init__(self):
         super().__init__(
             card_id = "soot",

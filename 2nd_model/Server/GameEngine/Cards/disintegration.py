@@ -6,6 +6,7 @@ from ..Effects.InstantEffects.instant_damage import InstantDamage
 
 
 class Disintegration(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     AMOUNT = 6
 
     def __init__(self):

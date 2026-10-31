@@ -2,10 +2,13 @@ from ._status_effect import StatusEffect
 
 
 class BlockLockout(StatusEffect):
-    """You cannot gain Block for `amount` turns.
+    """You cannot gain Block from cards for `amount` turns.
 
-    Stops all Block, not just Block from cards: modify_block_gained sees an
-    amount, not where it came from."""
+    Only a card's own Block, as the game's NoBlockPower (not Unpowered, and
+    from a card): Entrench's doubling, a power's Block (Plating, Prolong) and
+    a teammate's Beacon of Hope still land."""
+
+    BLOCK_POWERED_ONLY = True
 
     def __init__(self, source, target, amount):
         super().__init__("block_lockout")

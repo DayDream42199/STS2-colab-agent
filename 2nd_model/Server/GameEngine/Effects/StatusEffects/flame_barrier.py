@@ -31,5 +31,6 @@ class FlameBarrier(StatusEffect):
         attacker = context.payload.get("attacker")
         if attacker is None or not attacker.is_alive():
             return None
+        # Unpowered, as the game's FlameBarrierPower: no Strength, no attack.
         return [InstantDamage(
-            source=context.source, target=attacker, amount=self.amount)]
+            source=context.source, target=attacker, amount=self.amount, is_attack=False)]

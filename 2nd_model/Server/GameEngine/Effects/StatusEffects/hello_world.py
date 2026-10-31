@@ -4,7 +4,9 @@ from ..InstantEffects.instant_add_card import InstantAddCard
 
 
 class HelloWorld(StatusEffect):
-    """At the start of your turn, add a random Common card into your Hand."""
+    """At the start of your turn, add `amount` random Common cards into your
+    Hand, all different (the game's HelloWorldPower, GetDistinctForCombat).
+    Before the hand is drawn, so they take room in it (BeforeHandDraw)."""
 
     def on_owner_turn_end(self):
         pass
@@ -19,14 +21,17 @@ class HelloWorld(StatusEffect):
         from ...Registry.card_registry import generatable_card_ids
         from ...Cards._card_enums import CardClass, CardRarity
 
-        if event is not GameEvent.TURN_START:
+        if event is not GameEvent.BEFORE_HAND_DRAW:
             return None
         if context.target is not context.source:
             return None
         pool = generatable_card_ids(
-            card_class=CardClass.IRONCLAD, rarity=CardRarity.COMMON)
+            card_class=CardClass.IRONCLAD, rarity=CardRarity.COMMON,
+            solo=context.solo)
         if not pool:
             return None
+        picked = context.rngs.card_generation.sample(pool, min(self.amount, len(pool)))
         return [InstantAddCard(
             source=context.source, target=context.source,
-            card_id=context.rngs.card_generation.choice(pool), pile=InstantAddCard.HAND)]
+            card_id=card_id, pile=InstantAddCard.HAND)
+            for card_id in picked]

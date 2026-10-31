@@ -5,7 +5,7 @@ from ..InstantEffects.instant_move_card import InstantMoveCard
 
 
 class Entropy(StatusEffect):
-    """At the start of your turn, Transform 1 card in your Hand.
+    """At the start of your turn, Transform `amount` cards in your Hand.
 
     Transform is GONE plus an add, so the old card is replaced rather than
     exhausted. What it turns into stays random - the card only lets you pick
@@ -21,30 +21,33 @@ class Entropy(StatusEffect):
         self.amount = amount
 
     def on_event(self, event, context):
-        from ...Registry.card_registry import generatable_card_ids
-        from ...Cards._card_enums import CardClass
+        from ...Registry.card_registry import transform_card_ids
 
         if event is not GameEvent.TURN_START:
             return None
         if context.target is not context.source:
             return None
         ally = context.source
-        pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
-        if not ally.hand or not pool:
-            return None
-        replacement = context.rngs.card_selection.choice(pool)
 
-        def transform(chosen):
-            return [
-                InstantMoveCard(
+        # `amount` cards, one question at a time. Each turns into a card of
+        # its own pool (transform_card_ids): a Wound into another Status.
+        def ask(left):
+            if left <= 0 or not ally.hand:
+                return
+            def transform(chosen):
+                ask(left - 1)
+                options = transform_card_ids(chosen, solo=context.solo)
+                effects = [InstantMoveCard(
                     source=ally, target=ally, card_ids=[chosen],
                     from_pile=InstantMoveCard.HAND,
-                    to_pile=InstantMoveCard.GONE),
-                InstantAddCard(
-                    source=ally, target=ally, card_id=replacement,
-                    pile=InstantAddCard.HAND),
-            ]
-
-        context.ask(ally, "Transform a card in your Hand",
-                    lambda: list(ally.hand), transform)
+                    to_pile=InstantMoveCard.GONE)]
+                if options:
+                    effects.append(InstantAddCard(
+                        source=ally, target=ally,
+                        card_id=context.rngs.card_selection.choice(options),
+                        pile=InstantAddCard.HAND))
+                return effects
+            context.ask(ally, "Transform a card in your Hand",
+                        lambda: list(ally.hand), transform)
+        ask(self.amount)
         return None

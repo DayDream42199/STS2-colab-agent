@@ -81,6 +81,12 @@ class Context:
         # is its own - the game's CardPlay. What it does carries the number.
         self.play_id = None
 
+    @property
+    def solo(self):
+        """A fight with one player, where the co-op cards are never made at
+        random (generatable_card_ids)."""
+        return len(self.all_allies) == 1
+
     def ask(self, ally, prompt, options, resolve, can_stop=False):
         """Put a question to the player, to be answered after this action.
 

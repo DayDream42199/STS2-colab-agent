@@ -24,6 +24,9 @@ class CardRarity(Enum):
     UNCOMMON = auto()
     RARE = auto()
     ANCIENT = auto()
+    # Handed out by events, never drafted or made at random - the game's
+    # CardRarity.Event, which CardFactory.FilterForCombat leaves out.
+    EVENT = auto()
 
 class TargetType(Enum):
     ENEMY = auto()

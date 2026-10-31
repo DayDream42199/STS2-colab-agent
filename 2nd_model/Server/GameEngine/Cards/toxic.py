@@ -15,9 +15,9 @@ class Toxic(Card):
             card_type = CardType.STATUS,
             card_class = CardClass.STATUS,
             rarity = CardRarity.COMMON,
-            cost = 0,
+            cost = 1,
             target_type = TargetType.SELF,
-            properties = CardProperties(playable=False, exhaust=True)
+            properties = CardProperties(exhaust=True)
         )
 
     def on_event(self, event, context):

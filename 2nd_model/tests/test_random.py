@@ -8,6 +8,7 @@ from GameEngine.Registry.unit_registry import create_ally, create_enemy
 from GameEngine.Registry.card_registry import (create_card, known_card_ids,
                                                generatable_card_ids)
 from GameEngine.Cards._card_enums import CardClass, CardType, CardRarity
+from GameEngine.Cards._card_ref import CardRef, free_copy, is_upgraded
 
 bad = []
 def check(l, c, d=""):
@@ -135,37 +136,41 @@ check("Infernal Blade adds one Attack", len(a[0].hand) == 1, a[0].hand)
 added = a[0].hand[0]
 check("Infernal Blade's card is an Attack",
       create_card(added).card_type is CardType.ATTACK, added)
-check("Infernal Blade marks it free this turn",
-      a[0].free_this_turn == [added], a[0].free_this_turn)
+check("Infernal Blade makes that copy free this turn",
+      added.turn_cost_cap == 0, added.turn_cost_cap)
 printed = create_card(added).cost
 a[0].energy = 0
 c.play_card(a[0], 0, target=es[0] if create_card(added).target_type.name == "ENEMY" else None)
 check("the free card plays at 0 energy (printed cost %s)" % printed,
       a[0].energy == 0, a[0].energy)
-check("the free grant is spent after one play",
-      a[0].free_this_turn == [], a[0].free_this_turn)
+check("and played, it is free no more (this turn or until played)",
+      added.turn_cost_cap is None, added.turn_cost_cap)
 
 c, a, es = fight(seed=8)
 play(c, a[0], "infernal_blade")
 added = a[0].hand[0]
 c.end_player_turn()
-check("free-this-turn expires at turn start", a[0].free_this_turn == [],
-      a[0].free_this_turn)
+check("free-this-turn lapses at the end of the turn", added.turn_cost_cap is None,
+      added.turn_cost_cap)
 
 c, a, es = fight(seed=9)
 play(c, a[0], "distraction")
 check("Distraction adds one Skill",
       len(a[0].hand) == 1 and create_card(a[0].hand[0]).card_type is CardType.SKILL,
       a[0].hand)
-check("Distraction marks it free", len(a[0].free_this_turn) == 1)
+check("Distraction makes it free", a[0].hand[0].turn_cost_cap == 0)
 
 c, a, es = fight(seed=10)
 play(c, a[0], "jackpot", es[0])
 check("Jackpot deals 25", es[0].current_hp == 175, es[0].current_hp)
 check("Jackpot adds 3 cards", len(a[0].hand) == 3, a[0].hand)
-check("Jackpot marks all 3 free",
-      sorted(a[0].free_this_turn) == sorted(a[0].hand),
-      (a[0].free_this_turn, a[0].hand))
+check("Jackpot's 3 are cards printed at 0, not cards made free (the game's Jackpot)",
+      all(create_card(c).cost == 0 and c.turn_cost_cap is None for c in a[0].hand),
+      a[0].hand)
+c, a, es = fight(seed=10)
+play(c, a[0], CardRef("jackpot", upgraded=True), es[0])
+check("Jackpot+ adds them upgraded", all(is_upgraded(c) for c in a[0].hand),
+      [(str(c), is_upgraded(c)) for c in a[0].hand])
 
 c, a, es = fight(seed=11)
 before = len(a[0].draw_pile)
@@ -183,45 +188,57 @@ check("Metamorphosis adds 3 to the draw pile",
 it = iter(a[0].draw_pile)
 check("Metamorphosis inserts without reordering what was already there",
       all(cid in it for cid in was), (was, a[0].draw_pile))
-check("Metamorphosis marks 3 free for the combat",
-      len(a[0].free_this_combat) == 3, a[0].free_this_combat)
+def free_for_combat(ally):
+    return [r for pile in (ally.hand, ally.draw_pile, ally.discard_pile)
+            for r in pile if getattr(r, "cost_cap", None) == 0]
+added = free_for_combat(a[0])
+check("Metamorphosis makes its 3 free for the combat", len(added) == 3, added)
 check("Metamorphosis adds Attacks",
-      all(create_card(cid).card_type is CardType.ATTACK
-          for cid in a[0].free_this_combat))
+      all(create_card(cid).card_type is CardType.ATTACK for cid in added))
 c.end_player_turn()
 check("free-this-combat survives a turn boundary",
-      len(a[0].free_this_combat) == 3, a[0].free_this_combat)
+      len(free_for_combat(a[0])) == 3, free_for_combat(a[0]))
+ref = added[0]
+target = es[0] if create_card(ref).target_type.name == "ENEMY" else None
+for _ in range(2):
+    pile = next(p for p in (a[0].hand, a[0].draw_pile, a[0].discard_pile)
+                if any(r is ref for r in p))
+    pile[:] = [r for r in pile if r is not ref]
+    a[0].hand.insert(0, ref)
+    a[0].energy = 0
+    c.play_card(a[0], 0, target=target)
+check("and free every time it is played, not just the first (SetToFreeThisCombat)",
+      a[0].energy == 0 and ref.cost_cap == 0, (a[0].energy, ref.cost_cap))
 
-# --- the free tally must not leak ------------------------------------------
+# --- a free copy, not a free name ------------------------------------------
 c, a, es = fight(seed=12)
-a[0].free_this_turn = ["bludgeon"]
-a[0].hand = ["bludgeon"]
+a[0].hand = [free_copy("bludgeon")]
 a[0].energy = 0
 try:
     c.play_card(a[0], 0, target=None)   # Bludgeon needs a target
-    check("a rejected play does not burn the free grant", False, "no raise")
+    check("a rejected play does not use up the free copy", False, "no raise")
 except ValueError:
-    check("a rejected play does not burn the free grant",
-          a[0].free_this_turn == ["bludgeon"], a[0].free_this_turn)
+    check("a rejected play does not use up the free copy",
+          a[0].hand[0].turn_cost_cap == 0, a[0].hand[0].turn_cost_cap)
 
 c, a, es = fight(seed=13)
-a[0].free_this_turn = ["strike"]
-a[0].hand = ["strike", "strike"]
-a[0].energy = 1
-c.play_card(a[0], 0, target=es[0])
-c.play_card(a[0], 0, target=es[0])
-check("only one of two identical cards is free",
-      a[0].energy == 0, a[0].energy)
+a[0].hand = [CardRef("strike"), free_copy("strike")]
+a[0].energy = 0
+try:
+    c.play_card(a[0], 0, target=es[0])
+    check("of two Strikes only the free copy is free", False, "the other one played")
+except ValueError:
+    c.play_card(a[0], 1, target=es[0])
+    check("of two Strikes only the free copy is free", a[0].hand == ["strike"], a[0].hand)
 
-# A free X-cost card spends nothing, so X is 0 and it does nothing. Reachable
-# now that Infernal Blade can hand you a Whirlwind.
+# A free X-cost card is still X: the game's cost changes skip X cards, so it
+# spends everything and hits that many times.
 c, a, es = fight(seed=14)
-a[0].free_this_turn = ["whirlwind"]
-a[0].hand = ["whirlwind"]
+a[0].hand = [free_copy("whirlwind")]
 a[0].energy = 3
 c.play_card(a[0], 0)
-check("a free X-cost card keeps the energy and deals nothing",
-      a[0].energy == 3 and es[0].current_hp == es[0].max_hp,
+check("a free X-cost card still spends all your Energy, and hits X times",
+      a[0].energy == 0 and es[0].current_hp == es[0].max_hp - 15,
       (a[0].energy, es[0].current_hp))
 
 print()

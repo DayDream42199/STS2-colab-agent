@@ -6,6 +6,7 @@ VARIANT for anything that wants to tell them apart. TOKEN class: an event hands
 them out, so "a random card" must never turn one up.
 """
 from ._card import Card
+from ._card_ref import free_copy
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.InstantEffects.instant_damage import InstantDamage
 from ..Effects.InstantEffects.instant_block import InstantBlock
@@ -119,12 +120,11 @@ class MadScienceChaos(MadScience):
 
         me = context.source
         effects = [InstantBlock(source=me, target=me, amount=self.BLOCK)]
-        pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
+        pool = generatable_card_ids(card_class=CardClass.IRONCLAD, solo=context.solo)
         if pool:
             picked = context.rngs.card_generation.choice(pool)
-            me.free_this_turn.append(picked)
             effects.append(InstantAddCard(
-                source=me, target=me, card_id=picked, pile=InstantAddCard.HAND))
+                source=me, target=me, card_id=free_copy(picked), pile=InstantAddCard.HAND))
         return effects
 
 

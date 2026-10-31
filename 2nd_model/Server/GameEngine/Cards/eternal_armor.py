@@ -12,7 +12,7 @@ class EternalArmor(Card):
             name = "Eternal Armor",
             card_type = CardType.POWER,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 3,
             target_type = TargetType.SELF
         )

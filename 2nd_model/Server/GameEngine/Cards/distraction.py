@@ -1,4 +1,5 @@
 from ._card import Card
+from ._card_ref import free_copy
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ._card_properties import CardProperties
 from ..Effects.InstantEffects.instant_add_card import InstantAddCard
@@ -11,7 +12,7 @@ class Distraction(Card):
             name = "Distraction",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 1,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)
@@ -23,11 +24,11 @@ class Distraction(Card):
         from ..Registry.card_registry import generatable_card_ids
 
         pool = generatable_card_ids(
-            card_class=CardClass.IRONCLAD, card_type=CardType.SKILL)
+            card_class=CardClass.IRONCLAD, card_type=CardType.SKILL,
+            solo=context.solo)
         if not pool:
             return []
         picked = context.rngs.card_generation.choice(pool)
-        context.source.free_this_turn.append(picked)
         return [InstantAddCard(
             source=context.source, target=context.source,
-            card_id=picked, pile=InstantAddCard.HAND)]
+            card_id=free_copy(picked), pile=InstantAddCard.HAND)]

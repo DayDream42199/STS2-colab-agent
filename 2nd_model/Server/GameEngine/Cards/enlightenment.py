@@ -1,7 +1,7 @@
 from ._card import Card
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ._card_properties import CardProperties
-from ..Effects.StatusEffects.enlightenment import Enlightenment as EnlightenmentStatus
+from ..Effects.InstantEffects.instant_cap_cost import InstantCapCost
 
 
 class Enlightenment(Card):
@@ -11,15 +11,20 @@ class Enlightenment(Card):
             name = "Enlightenment",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 0,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)
         )
 
     def get_effects(self, context):
-        # A status rather than a per-card rewrite: piles hold id strings, so
-        # there is no per-copy cost to set. Capping every card the owner plays
-        # this turn is the same thing for a hand you cannot add to for free.
-        return [EnlightenmentStatus(
-            source=context.source, target=context.source, amount=1)]
+        # The cards in hand now, each copy capped at 1: this turn or until it
+        # is played, or for the rest of the combat upgraded - the game's
+        # EnergyCost.SetThisTurnOrUntilPlayed / SetThisCombat(1, reduceOnly).
+        # A card drawn afterwards costs what it costs.
+        if not context.source.hand:
+            return []
+        return [InstantCapCost(
+            source=context.source, target=context.source,
+            card_refs=list(context.source.hand), amount=1,
+            this_combat=self.upgraded)]

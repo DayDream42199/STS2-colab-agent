@@ -4,17 +4,23 @@ from ..InstantEffects.instant_energy import InstantEnergy
 
 
 class Automation(StatusEffect):
-    """Every Nth card drawn, gain Energy. Counts across the whole combat."""
+    """Every 10th card drawn, gain `amount` Energy. Counts across the whole
+    combat. Each Automation played counts its own draws from when it was
+    played, as the game's AutomationPower instances do: `counts` holds
+    [energy, cards drawn] per copy."""
 
     EVERY = 10
-    ENERGY = 1
 
     def __init__(self, source, target, amount):
         super().__init__("automation")
         self.source = source
         self.target = target
         self.amount = amount
-        self.drawn = 0
+        self.counts = [[amount, 0]]
+
+    def absorb(self, other):
+        self.counts.extend(other.counts)
+        self.amount = sum(energy for energy, _ in self.counts)
 
     def on_owner_turn_end(self):
         pass  # a power lasts the whole combat
@@ -24,9 +30,13 @@ class Automation(StatusEffect):
             return None
         if context.target is not context.source:
             return None
-        self.drawn += context.payload.get("amount", 1)
-        if self.drawn < self.EVERY:
+        energy = 0
+        for count in self.counts:
+            count[1] += context.payload.get("amount", 1)
+            while count[1] >= self.EVERY:
+                count[1] -= self.EVERY
+                energy += count[0]
+        if not energy:
             return None
-        self.drawn -= self.EVERY
         return [InstantEnergy(
-            source=context.source, target=context.source, amount=self.ENERGY)]
+            source=context.source, target=context.source, amount=energy)]

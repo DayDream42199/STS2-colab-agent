@@ -52,6 +52,8 @@ def play(kind, players, act, seed, scale=True):
     c, a, foe = fight(kind, players, act, seed, scale)
     rows = []
     for _ in range(TURNS):
+        if c.is_over():
+            break                    # it fled (Fat Gremlin): nothing more to compare
         move = foe.intent["name"]
         before = {p.unit_id: p.current_hp for p in a}
         for p in a:
@@ -97,10 +99,23 @@ for kind in SCRIPTED:
                   [r[4] for r in rows] == [[s[4][0]] * players for s in solo],
                   ([r[4] for r in rows], [s[4][0] for s in solo]))
 
-            scale = block_scale(players, act)
-            check("%s: Block x%.1f, rounded" % (label, scale),
-                  [r[2] for r in rows] == [round(s[2] * scale) for s in solo],
-                  ([r[2] for r in rows], [round(s[2] * scale) for s in solo]))
+            plating = create_enemy(kind, "e1").__class__.__dict__.get("PLATING")
+            if plating:
+                # A power's Block, not a move's: Plating x (2 per extra player
+                # + 1), paid at each enemy turn's end, one less per player each
+                # turn after the first (PlatingPower) - not scaled as Block.
+                want = [plating * ((players - 1) * 2 + 1) - players * k for k in range(TURNS)]
+                # Asleep sheds it before its last sleeping turn ends (Lagavulin
+                # Matriarch): only the turns it still holds it are compared.
+                asleep = create_enemy(kind, "e1").__class__.__dict__.get("ASLEEP")
+                held = asleep - 1 if asleep else TURNS
+                check("%s: Plating Block %s" % (label, want[:3]), [r[2] for r in rows][:held] == want[:held],
+                      [r[2] for r in rows])
+            else:
+                scale = block_scale(players, act)
+                check("%s: Block x%.1f, rounded" % (label, scale),
+                      [r[2] for r in rows] == [round(s[2] * scale) for s in solo],
+                      ([r[2] for r in rows], [round(s[2] * scale) for s in solo]))
 
             artifact = foe.get_status("artifact")
             solo_artifact = create_enemy(kind, "e1").__class__.__dict__.get("ARTIFACT")
@@ -128,10 +143,14 @@ def announced_block(enemy):
     return intent.get("amount", 0) if intent.get("type") == "block" else 0
 
 for kind in known_enemy_type_ids():
+    if create_enemy(kind, "x").__class__.__dict__.get("PLATING"):
+        continue        # Plating's Block is a power's, not in any intent - checked above
     for players in (1, 2, 3, 4):
         c, a, foe = fight(kind, players, "act1", 3)
         told, got = [], []
         for _ in range(TURNS):
+            if c.is_over():
+                break                # it fled (Fat Gremlin)
             told.append(announced_block(foe))
             for p in a:
                 p.hand = []

@@ -4,7 +4,7 @@ from ..Effects.InstantEffects.instant_damage import InstantDamage
 
 
 class GiantRock(Card):
-    DAMAGE = 20
+    DAMAGE = 16
 
     def __init__(self):
         super().__init__(

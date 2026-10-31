@@ -4,13 +4,16 @@ from ..InstantEffects.instant_move_card import InstantMoveCard
 
 
 class ReturnToHand(StatusEffect):
-    """Cards held out of play until the owner's next turn, then put in hand.
+    """Cards played this turn that come back to hand at the start of the
+    owner's next turn (Bolas, Thrumming Hatchet).
 
-    It holds the refs itself, because a card waiting to come back is in no
-    pile - and holding the ref is what makes it the same card coming back."""
+    As the game's BeforeHandDraw clause: the card goes to the discard pile
+    like any other, and next turn, before the hand is drawn, it is taken from
+    whatever pile it is in by then - discard, a reshuffled draw pile, the
+    exhaust pile - unless it is already in hand. It holds the refs, since it
+    is that copy coming back."""
 
-    # Asked before Nostalgia and Rebound: this one is claiming its own card.
-    REDIRECT_ORDER = 0
+    PILES = (InstantMoveCard.DISCARD, InstantMoveCard.DRAW, InstantMoveCard.EXHAUST)
 
     def __init__(self, source, target, card_ref):
         super().__init__("return_to_hand")
@@ -31,22 +34,22 @@ class ReturnToHand(StatusEffect):
     def is_expired(self):
         return not self.held
 
-    def redirect_played_card(self, card, context):
-        if any(held is card.ref for held in self.held):
-            return InstantMoveCard.GONE
-        return None
-
     def on_event(self, event, context):
-        if event is not GameEvent.TURN_START:
+        if event is not GameEvent.BEFORE_HAND_DRAW:
             return None
         if context.target is not context.source:
             return None
         coming_back, self.held = self.held, []
         self.amount = 0
-        if not coming_back:
-            return None
-        return [InstantMoveCard(
-            source=context.source, target=context.source,
-            card_ids=coming_back,
-            from_pile=InstantMoveCard.GONE,
-            to_pile=InstantMoveCard.HAND)]
+        ally = context.source
+        moves = []
+        for ref in coming_back:
+            if any(held is ref for held in ally.hand):
+                continue
+            pile = next((name for name in self.PILES
+                         if any(held is ref for held in getattr(ally, name))), None)
+            if pile is not None:
+                moves.append(InstantMoveCard(
+                    source=ally, target=ally, card_ids=[ref],
+                    from_pile=pile, to_pile=InstantMoveCard.HAND))
+        return moves or None

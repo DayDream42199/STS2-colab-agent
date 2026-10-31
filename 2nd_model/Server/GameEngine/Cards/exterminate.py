@@ -13,7 +13,7 @@ class Exterminate(Card):
             name = "Exterminate",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 1,
             target_type = TargetType.ALL_ENEMIES
         )

@@ -13,6 +13,14 @@ class Dexterity(StatusEffect):
 
     BLOCK_POWERED_ONLY = True       # not on Entrench's doubling, as in the game
 
+    @property
+    def IS_DEBUFF(self):
+        # Below zero it is one, as Strength.
+        return self.amount < 0
+
+    def is_expired(self):
+        return self.amount == 0     # below zero it stays, as Strength
+
     def modify_block_gained(self, amount):
         return amount + self.amount
 

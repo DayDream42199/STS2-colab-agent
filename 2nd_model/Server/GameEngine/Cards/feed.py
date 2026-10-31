@@ -6,6 +6,7 @@ from ..Effects.InstantEffects.instant_max_hp_gain import InstantMaxHpGain
 
 
 class Feed(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     DAMAGE = 10
     MAX_HP = 3
 

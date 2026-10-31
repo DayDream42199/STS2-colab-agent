@@ -5,6 +5,7 @@ from ..Effects.StatusEffects.bomb import Bomb
 
 class TheBomb(Card):
     TURNS = 3
+    DAMAGE = 40
 
     def __init__(self):
         super().__init__(
@@ -19,4 +20,4 @@ class TheBomb(Card):
 
     def get_effects(self, context):
         return [Bomb(source=context.source, target=context.source,
-                     amount=self.TURNS)]
+                     amount=self.TURNS, damage=self.DAMAGE)]

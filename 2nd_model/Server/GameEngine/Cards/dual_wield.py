@@ -12,7 +12,7 @@ class DualWield(Card):
             name = "Dual Wield",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 1,
             target_type = TargetType.SELF
         )

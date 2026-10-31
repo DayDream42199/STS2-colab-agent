@@ -6,6 +6,7 @@ from ..Effects.InstantEffects.instant_move_card import InstantMoveCard
 
 
 class NeowsFury(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     DAMAGE = 10
     COUNT = 2
 

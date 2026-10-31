@@ -6,6 +6,10 @@ from ..Effects.InstantEffects.instant_hp_loss import InstantHpLoss
 
 
 class Beckon(Card):
+    """Soul Fysh's. Playable for 1 and does nothing - the way to get it out
+    of your hand before the turn ends, as the game's Beckon has no
+    Unplayable keyword."""
+
     AMOUNT = 6
 
     def __init__(self):
@@ -15,9 +19,9 @@ class Beckon(Card):
             card_type = CardType.STATUS,
             card_class = CardClass.STATUS,
             rarity = CardRarity.COMMON,
-            cost = 0,
+            cost = 1,
             target_type = TargetType.SELF,
-            properties = CardProperties(playable=False)
+            properties = CardProperties()
         )
 
     def on_event(self, event, context):

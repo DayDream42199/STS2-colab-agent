@@ -11,7 +11,7 @@ class Anointed(Card):
             name = "Anointed",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 1,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)
@@ -21,9 +21,13 @@ class Anointed(Card):
         # Imported here, not at module level: card_registry imports this
         # module, so a top-level import would be circular.
         from ..Registry.card_registry import create_card
-        # Every Rare in the pile, not just one.
-        picked = [c for c in context.source.draw_pile
-                  if create_card(c).rarity is CardRarity.RARE]
+        # Random Rares from the pile, as many as the hand has room for; the
+        # rest stay where they are (the game's TakeRandom(room), CombatCardSelection).
+        ally = context.source
+        rares = [c for c in ally.draw_pile
+                 if create_card(c).rarity is CardRarity.RARE]
+        room = max(0, ally.HAND_LIMIT - len(ally.hand))
+        picked = context.rngs.card_selection.sample(rares, min(room, len(rares)))
         if not picked:
             return []
         return [InstantMoveCard(

@@ -12,7 +12,7 @@ class ByrdSwoop(Card):
             name = "Byrd Swoop",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 0,
             target_type = TargetType.ENEMY
         )

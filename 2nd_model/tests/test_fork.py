@@ -150,15 +150,15 @@ a[0].hand = [first, second]
 c.play_card(a[0], 0, target=es[0])
 check("Maul hits twice for 5", es[0].current_hp == 390, es[0].current_hp)
 c.play_card(a[0], 0, target=es[0])
-check("the second Maul already carries the +2 and hits for 7 twice",
-      es[0].current_hp == 376, es[0].current_hp)
+check("the second Maul already carries the +1 and hits for 6 twice",
+      es[0].current_hp == 378, es[0].current_hp)
 
 c, a, es = fight()
 a[0].draw_pile = hand("maul")
 a[0].hand = hand("maul")
 c.play_card(a[0], 0, target=es[0])
 check("a Maul still in the draw pile is boosted too",
-      a[0].draw_pile[0].bonus_damage == 2, a[0].draw_pile[0].bonus_damage)
+      a[0].draw_pile[0].bonus_damage == 1, a[0].draw_pile[0].bonus_damage)
 
 # --- Thrash -----------------------------------------------------------------
 # The game's order: hit twice at what this copy has grown to, THEN eat a
@@ -217,9 +217,9 @@ ref = CardRef("bolas")
 a[0].hand = [ref]
 c.play_card(a[0], 0, target=es[0])
 check("Bolas deals 3", es[0].current_hp == 397, es[0].current_hp)
-check("and goes to no pile at all",
-      a[0].discard_pile == [] and a[0].exhaust_pile == [] and a[0].hand == [],
-      (a[0].discard_pile, a[0].exhaust_pile, a[0].hand))
+check("and goes to the discard pile, as in the game",
+      len(a[0].discard_pile) == 1 and a[0].discard_pile[0] is ref and a[0].hand == [],
+      (a[0].discard_pile, a[0].hand))
 c.end_player_turn()
 check("it is back in hand next turn, the same copy",
       any(h is ref for h in a[0].hand), a[0].hand)
@@ -266,13 +266,15 @@ c, a, es = fight(seed=9)
 a[0].hand = hand("apotheosis", "strike")
 a[0].draw_pile = hand("defend", "bash")
 a[0].discard_pile = hand("strike")
-a[0].exhaust_pile = hand("defend")
+a[0].exhaust_pile = hand("defend", "wound")
 c.play_card(a[0], 0)
 check("Apotheosis upgrades hand, draw pile and discard pile",
       all(is_upgraded(r) for r in a[0].hand + a[0].draw_pile + a[0].discard_pile),
       (a[0].hand, a[0].draw_pile, a[0].discard_pile))
-check("but not the exhaust pile",
-      not is_upgraded(a[0].exhaust_pile[0]))
+check("and the exhaust pile, as the game's AllCards",
+      is_upgraded(a[0].exhaust_pile[0]), a[0].exhaust_pile)
+check("but never a Status or a Curse, which cannot be upgraded",
+      not is_upgraded(a[0].exhaust_pile[1]), a[0].exhaust_pile)
 check("and Apotheosis exhausts itself",
       "apotheosis" in a[0].exhaust_pile, a[0].exhaust_pile)
 check("Apotheosis is Innate", create_card("apotheosis").properties.innate)
@@ -487,7 +489,7 @@ def duo(seed=1, hp=200, intent=None):
     return c, a, es
 
 c, a, es = duo()
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 check("Intercept grants 9 Block", a[0].block == 9, a[0].block)
 
 c, a, es = duo()
@@ -497,7 +499,7 @@ check("without it, the enemy hits both players for 5",
       (a[0].current_hp, a[1].current_hp))
 
 c, a, es = duo()
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 a[0].block = 0
 c.end_player_turn()
 check("with it, p1 takes both hits and p2 takes none",
@@ -505,18 +507,18 @@ check("with it, p1 takes both hits and p2 takes none",
       (a[0].current_hp, a[1].current_hp))
 
 c, a, es = duo()
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 c.end_player_turn()
 check("the interceptor's own Block meets the redirected hit, so it lands "
       "before resolution", (a[0].current_hp, a[0].block) == (199, 0),
       (a[0].current_hp, a[0].block))
 
 c, a, es = duo()
-play(c, a[0], CardRef("intercept", upgraded=True))
+play(c, a[0], CardRef("intercept", upgraded=True), a[1])
 check("Intercept+ grants 13 Block", a[0].block == 13, a[0].block)
 
 c, a, es = duo()
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 a[0].block = 0
 c.end_player_turn()
 check("it survived the end-of-turn tick into the enemy phase",
@@ -527,7 +529,7 @@ check("and is gone by the turn after, so p2 is hit again",
       a[1].current_hp == 195, a[1].current_hp)
 
 c, a, es = duo(intent={"type": "debuff_all", "status": "vulnerable", "amount": 1})
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 c.end_player_turn()
 check("it covers being hit, not being cursed - p2 still gets Vulnerable",
       a[1].get_status("vulnerable") is not None,
@@ -535,25 +537,39 @@ check("it covers being hit, not being cursed - p2 still gets Vulnerable",
 
 c, a, es = duo()
 play(c, a[0], "flame_barrier")
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 hp = es[0].current_hp
 c.end_player_turn()
 check("the redirected hit is answered by the interceptor's Flame Barrier",
       es[0].current_hp < hp, "enemy %d -> %d" % (hp, es[0].current_hp))
 
 c, a, es = duo()
-play(c, a[0], "intercept")
+play(c, a[0], "intercept", a[1])
 a[0].current_hp = 0
 c.end_player_turn()
 check("a dead interceptor intercepts nothing", a[1].current_hp == 195,
       a[1].current_hp)
 
 c, a, es = fight()
+try:
+    play(c, a[0], "intercept")
+    was_refused = False
+except ValueError:
+    was_refused = True
+check("alone there is nobody to cover: Intercept cannot be played", was_refused)
+
+# The game's CoveredPower goes on the chosen player only.
+c, a, es = fight(n_allies=3, seed=1)
 pin(es, {"type": "attack", "amount": 5})
-a[0].max_hp = a[0].current_hp = 200
-play(c, a[0], "intercept")
+for ally in a:
+    ally.max_hp = ally.current_hp = 200
+    ally.block = 0
+play(c, a[0], "intercept", a[1])
+a[0].block = 0
 c.end_player_turn()
-check("and alone it is just 9 Block", a[0].current_hp == 200, a[0].current_hp)
+check("three players: it covers the one it was played on, not the third",
+      [ally.current_hp for ally in a] == [190, 200, 195],
+      [ally.current_hp for ally in a])
 
 # --- per-turn limits --------------------------------------------------------
 def deck_fight(deck, seed=1):
@@ -653,8 +669,8 @@ c, a, es = fight(seed=21)
 a[0].hand = hand("discovery")
 c.play_card(a[0], 0)
 check("Discovery adds one card to hand", len(a[0].hand) == 1, a[0].hand)
-check("and marks that exact card free this turn",
-      a[0].free_this_turn == [a[0].hand[0]], a[0].free_this_turn)
+check("and makes that exact copy free this turn",
+      a[0].hand[0].turn_cost_cap == 0, a[0].hand[0].turn_cost_cap)
 check("and exhausts itself", a[0].exhaust_pile == ["discovery"],
       a[0].exhaust_pile)
 check("what it offers comes from the Ironclad pool",
@@ -862,7 +878,7 @@ a[0].hand = hand("splash")
 c.play_card(a[0], 0)
 got = a[0].hand
 check("Splash adds one card, free this turn",
-      len(got) == 1 and a[0].free_this_turn == [got[0]], (got, a[0].free_this_turn))
+      len(got) == 1 and got[0].turn_cost_cap == 0, (got, getattr(got[0], "turn_cost_cap", None)))
 check("and it is an Attack from the partner's (Ironclad) pool",
       create_card(got[0]).card_type.name == "ATTACK"
       and create_card(got[0]).card_class.name == "IRONCLAD",
@@ -917,7 +933,7 @@ c, a, es = fight(seed=9)
 play(c, a[0], "mad_science_chaos")
 check("Chaos: 8 Block and a random card, free this turn",
       a[0].block == 8 and len(a[0].hand) == 1
-      and a[0].free_this_turn == [a[0].hand[0]], (a[0].block, a[0].hand))
+      and a[0].hand[0].turn_cost_cap == 0, (a[0].block, a[0].hand))
 
 c, a, es = fight()
 play(c, a[0], "mad_science_expertise")

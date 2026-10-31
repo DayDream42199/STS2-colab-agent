@@ -11,7 +11,7 @@ class Scrawl(Card):
             name = "Scrawl",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 1,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)

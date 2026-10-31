@@ -5,6 +5,7 @@ from ..Effects.StatusEffects.tag_team import TagTeam as TagTeamStatus
 
 
 class TagTeam(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     DAMAGE = 11
 
     def __init__(self):

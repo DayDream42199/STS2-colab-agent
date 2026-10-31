@@ -18,13 +18,19 @@ class Catastrophe(Card):
         )
 
     def get_effects(self, context):
-        draw = list(context.source.draw_pile)
-        if not draw:
-            return []
-        picked = (draw if len(draw) <= self.COUNT
-                  else context.rngs.shuffle.sample(draw, self.COUNT))
-        return [
-            InstantPlayCard(source=context.source, target=context.source,
-                            card_id=card_id, from_pile=InstantPlayCard.DRAW)
-            for card_id in picked
-        ]
+        # Imported here, not at module level: card_registry imports this
+        # module, so a top-level import would be circular.
+        from ..Registry.card_registry import create_card
+
+        # One at a time, as the game's Catastrophe: each pick is made from the
+        # pile the last one left, and a playable card is taken over an
+        # Unplayable one whenever there is one.
+        for _ in range(self.COUNT):
+            draw = list(context.source.draw_pile)
+            if not draw:
+                return
+            playable = [c for c in draw if create_card(c).properties.playable]
+            yield InstantPlayCard(
+                source=context.source, target=context.source,
+                card_id=context.rngs.shuffle.choice(playable or draw),
+                from_pile=InstantPlayCard.DRAW)

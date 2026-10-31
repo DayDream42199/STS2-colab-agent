@@ -5,6 +5,7 @@ from ..Effects.InstantEffects.instant_draw import InstantDraw
 
 
 class HuddleUp(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     CARDS = 2
 
     def __init__(self):

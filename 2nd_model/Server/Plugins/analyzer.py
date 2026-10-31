@@ -17,9 +17,11 @@ A card's `cost` is energy (an X-cost card: what it spent, or would spend);
 
 TRAITS = ("A", "S", "T")       # Aggression, Scaling, Teamwork
 # Memory size: how many full-weight turns a profile is built from before
-# new evidence starts to move it slowly. The spec leaves it open; 8 is the
-# value from the design discussion.
-BETA = 8
+# new evidence starts to move it slowly. The spec leaves it open; 20, as the
+# teammate's CharacteristicAnalyzer package has it (the user's choice,
+# 2026-10-31). Until a profile reaches it, it sets only the confidence: A, S
+# and T come out the same at any beta.
+BETA = 20
 
 
 def _sum(cards, key, where=lambda c: True):

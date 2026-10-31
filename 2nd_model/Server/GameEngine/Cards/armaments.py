@@ -1,6 +1,5 @@
 from ._card import Card
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
-from ._card_ref import is_upgraded
 from ..Effects.InstantEffects.instant_block import InstantBlock
 from ..Effects.InstantEffects.instant_upgrade_card import InstantUpgradeCard
 
@@ -22,7 +21,12 @@ class Armaments(Card):
     def get_effects(self, context):
         ally = context.source
         effects = [InstantBlock(source=ally, target=ally, amount=self.BLOCK)]
-        candidates = [ref for ref in ally.hand if not is_upgraded(ref)]
+        # Imported here, not at module level: card_registry imports this
+        # module, so a top-level import would be circular.
+        from ..Registry.card_registry import can_upgrade
+
+        # What can be upgraded: not a Wound or a Curse (IsUpgradable).
+        candidates = [ref for ref in ally.hand if can_upgrade(ref)]
         if not candidates:
             return effects
         if self.upgraded:

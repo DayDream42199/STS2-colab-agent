@@ -31,12 +31,17 @@ SCRIPTS = [
     "test_plugin.py",      # the optional server plugin: absent, present, failing
     "test_combat_log.py",  # every action and outcome logged; the fight replays from it
     "test_legal_actions.py",  # every listed action accepted, every other refused
+    "test_wait.py",        # waiting never stalls a round; the agent's fixed action menu
     "test_rng_streams.py", # one seeded stream per purpose; the global random untouched
     "test_card_groups.py", # the agent plugin: card groups and descriptors
     "test_analyzer.py",    # the Characteristic Analyzer: arithmetic, and through the session
+    "test_turn_export.py", # a log's raw lines as turns; aura turns rebuilt by a replay
+    "test_teammates.py",   # five scripted teammates, and the analyzer reading their styles
     "test_ironclad_game.py",  # Ironclad behaviour as the installed game's code has it
+    "test_colorless_game.py",  # colorless, event, status and curse cards as the game's code has them
     "test_enemies.py",     # scripted enemies, the bosses, the Act 1 pool
     "test_overgrowth.py",  # the Overgrowth enemies ported since: Inklet, Fogmog, ...
+    "test_underdocks.py",  # the Underdocks enemies: Seapunk, Sewer Clam, ...
     "test_scaling.py",     # every enemy at 1-4 players: what scales, what must not
     "test_review.py",
     "test_bughunt.py",

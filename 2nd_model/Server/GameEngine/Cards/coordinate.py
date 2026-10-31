@@ -3,6 +3,7 @@ from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ..Effects.StatusEffects.strength_this_turn import StrengthThisTurn
 
 class Coordinate(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     STRENGTH = 5
 
     def __init__(self):

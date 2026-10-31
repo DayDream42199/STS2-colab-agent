@@ -27,6 +27,33 @@ class CombatPhase(Enum):
     OVER = "OVER"
 
 
+class _Hits:
+    """Which damage in one list of effects is one hit, so the dealer is
+    looked at once per hit, as the game's AttackCommand does: a hit lands on
+    all its targets, then the attack stops if the attacker has died (Thorns,
+    Flame Barrier). A hit is one `hit` number (enemy attacks and the cards
+    that roll a target per hit number theirs), or else a run of damage from
+    one source until a target comes round again: Whirlwind's e1 e2 | e1 e2,
+    Twin Strike's e1 | e1."""
+
+    def __init__(self):
+        self.source = self.number = None
+        self.targets = set()
+        self.dealer_alive = True
+
+    def mark(self, effect):
+        if not isinstance(effect, InstantDamage):
+            return
+        number = getattr(effect, "hit", None)
+        if (effect.source is not self.source
+                or (number is not None and number != self.number)
+                or (number is None and effect.target in self.targets)):
+            self.source, self.number, self.targets = effect.source, number, set()
+            self.dealer_alive = effect.source.is_alive()
+        self.targets.add(effect.target)
+        effect.dealer_alive = self.dealer_alive
+
+
 class CombatResult(Enum):
     VICTORY = "VICTORY"
     DEFEAT = "DEFEAT"
@@ -107,6 +134,12 @@ class Combat:
         # Players who have left: their questions are answered at random too,
         # or a fight would wait forever on someone who is not coming back.
         self.unattended = set()
+        # This player turn, by unit id: who has ended it (the game's "ready";
+        # playing a card takes it back), and who chose to wait since anything
+        # last changed. Whoever runs the players - the session - ends the
+        # round once everyone still there has ended.
+        self.ended_turn = set()
+        self.waiting = set()
 
     # --- lifecycle -------------------------------------------------------
 
@@ -121,6 +154,7 @@ class Combat:
 
         for ally in self.allies:
             self._build_draw_pile(ally)
+            self._emit(GameEvent.BEFORE_HAND_DRAW, ally)
             self._turn_draw(ally)
 
         self._new_turn()
@@ -172,7 +206,8 @@ class Combat:
         """Bring enemies into an ongoing fight. Returns them.
 
         Each arrives scaled for the party, with a unit id nobody holds, an
-        intent already chosen (so the client sees it at once), and `summoner`
+        intent already chosen on the players' turn (so the client sees it at
+        once; on the enemies' turn it comes with everyone's), and `summoner`
         as its leader. It does not act in the enemy phase that summoned it -
         the phase walks a snapshot of the lineup - and `stunned` makes it sit
         out the next one as well, as the reference does for backup."""
@@ -191,7 +226,11 @@ class Combat:
                 enemy.apply_status(Stun(source=summoner, target=enemy, amount=1))
             self.enemies.append(enemy)
             self._enemy_enters(enemy)
-            enemy.choose_intent(self._context_for(enemy))
+            if self.phase != CombatPhase.ENEMY_TURN:
+                # On the enemies' turn it picks its move with everyone else
+                # once that turn is over, as the game's AfterCreatureAdded
+                # rolls only on the players' side - not twice.
+                enemy.choose_intent(self._context_for(enemy))
             arrived.append(enemy)
         return arrived
 
@@ -244,6 +283,14 @@ class Combat:
                 if on_death is not None:
                     for effect in on_death(self._context_for(enemy)) or ():
                         self._resolve(effect)
+                if enemy.is_alive():
+                    # It did not die after all (Waterfall Giant's Steam
+                    # Eruption): its real death is still to come.
+                    enemy.death_resolved = False
+                elif getattr(enemy, "revive_in", 0) <= 0:
+                    # Gone for good (an Illusion coming back is not): the other
+                    # enemies may react - Corpse Slug's Ravenous.
+                    self._emit(GameEvent.ENEMY_DIED, enemy)
         # And as the game's CreatureCmd.Kill: once only Minions are left
         # standing - no enemy of its own right, alive or about to revive - they
         # go too (The Kin's followers when the Priest falls).
@@ -294,9 +341,9 @@ class Combat:
             raise ValueError(f"{card.name} cannot be played.")
 
         # These all read the whole hand, and all come before the cost: a play
-        # the hand forbids must not spend energy or a free grant.
+        # the hand forbids must not spend energy.
         cap = self._play_cap(ally)
-        if cap is not None and ally.turn_count("cards_played") >= cap:
+        if self._capped(ally):
             raise ValueError(
                 f"{ally.unit_id} cannot play more than {cap} cards this turn.")
         locked = self._must_play_first(ally)
@@ -304,18 +351,19 @@ class Combat:
             raise ValueError(f"{create_card(locked).name} must be played first.")
         if not card.playable_now(ally):
             raise ValueError(f"{card.name} cannot be played out of this hand.")
+        if self._forbidden(ally, card):
+            raise ValueError(f"{card.name} cannot be played this turn.")
 
-        # Not spent yet: a rejected play must not burn a free grant.
-        free_bucket = self._free_bucket(ally, card_id)
-        cost = 0 if free_bucket is not None else self.card_cost(ally, card)
+        cost = self.card_cost(ally, card)
         if ally.energy < cost:
             raise ValueError(f"Not enough energy to play {card.name}.")
 
         resolved_target = self._resolve_target(card, ally, target)
 
+        # Playing after ending takes the end back; whoever waited looks again.
+        self.ended_turn.discard(ally.unit_id)
+        self.waiting.clear()
         ally.spend_energy(cost)
-        if free_bucket is not None:
-            free_bucket.remove(card_id)
         ally.hand.pop(hand_index)
 
         # An X-cost card spends everything, and needs to be told how much.
@@ -324,6 +372,48 @@ class Combat:
                              x_amount=x_amount)
         results.extend(self._drain_asks())
         return results
+
+    def end_turn(self, ally):
+        """`ally` is done for this turn. They may still play, which takes it
+        back; the round ends once everyone still there has ended
+        (end_player_turn, called by whoever runs the players)."""
+        self._check_may_act(ally)
+        self.ended_turn.add(ally.unit_id)
+        self.waiting.clear()
+
+    def wait(self, ally):
+        """`ally` lets the others move first. Nothing in the fight changes;
+        the next play, answer or end turn, by anyone, clears it and they
+        decide again. Allowed only while may_wait says so."""
+        self._check_may_act(ally)
+        if not self.may_wait(ally):
+            raise ValueError("Nobody else is still to act: play a card or end your turn.")
+        self.waiting.add(ally.unit_id)
+
+    def may_wait(self, ally):
+        """Whether `ally` may wait: not ended, not already waiting, and
+        someone else can still move the turn on. So waiting can never stall a
+        round - of the players who have not ended, one has always not waited."""
+        if ally.unit_id in self.ended_turn or ally.unit_id in self.waiting:
+            return False
+        return any(self._still_to_act(other) for other in self.allies if other is not ally)
+
+    def _still_to_act(self, ally):
+        """A question to answer, or not yet ended or waiting. Never a player
+        who left: nobody is there to act for them."""
+        if not ally.is_alive() or ally.unit_id in self.unattended:
+            return False
+        if ally.unit_id in self.pending_choices:
+            return True
+        return ally.unit_id not in self.ended_turn and ally.unit_id not in self.waiting
+
+    def _check_may_act(self, ally):
+        if self.phase != CombatPhase.PLAYER_TURN:
+            raise RuntimeError("It is not the player turn.")
+        if ally.unit_id in self.pending_choices:
+            raise ValueError("Answer the choice in front of you first.")
+        if not ally.is_alive():
+            raise ValueError(f"{ally.unit_id} has been defeated and cannot act.")
 
     @staticmethod
     def _play_cap(ally):
@@ -336,6 +426,19 @@ class Combat:
         caps += [status.PLAY_CAP for status in ally.statuses.values()]
         caps = [cap for cap in caps if cap is not None]
         return min(caps) if caps else None
+
+    @classmethod
+    def _capped(cls, ally):
+        """Whether `ally` has played as many cards this turn as the cap allows.
+        Plays started count, so a card Havoc turns up as your third play is
+        already past Normality (the game counts CardPlaysStarted)."""
+        cap = cls._play_cap(ally)
+        return cap is not None and ally.turn_count("cards_started") >= cap
+
+    @staticmethod
+    def _forbidden(ally, card):
+        """Whether a status of `ally`'s rules this card out (Smoggy)."""
+        return any(status.forbids_play(card) for status in ally.statuses.values())
 
     @staticmethod
     def _deck_penalties(ally):
@@ -372,7 +475,7 @@ class Combat:
         return None
 
     def card_cost(self, ally, card):
-        """What this card costs `ally` right now, before any free grant.
+        """What this card costs `ally` right now.
 
         The card's own clause runs first, then statuses, so Corruption can zero
         a Skill whatever it would otherwise cost. Statuses run in COST_ORDER:
@@ -382,6 +485,11 @@ class Combat:
         if card.cost == Card.X_COST:
             return ally.energy
         cost = card.dynamic_cost(self._context_for(ally, ally))
+        if card.cost_cap is not None:
+            # A cap set on this copy (Enlightenment, a free copy at 0) only
+            # ever lowers it; statuses come after, as the game's global
+            # modifiers come after a card's local ones.
+            cost = min(cost, card.cost_cap)
         for status in sorted(ally.statuses.values(), key=lambda s: s.COST_ORDER):
             cost = status.modify_card_cost(cost, card)
         return max(0, int(cost))
@@ -400,7 +508,9 @@ class Combat:
         if from_pile is not None and not take(from_pile, card_id):
             return []
 
-        if not card.properties.playable:
+        # The game's ShouldPlay is asked of an automatic play too: past
+        # Normality's third card the card goes to its pile unplayed.
+        if not card.properties.playable or self._forbidden(ally, card) or self._capped(ally):
             self._route_played(ally, card_id, card, force_exhaust)
             return []
 
@@ -427,16 +537,24 @@ class Combat:
         """
         plays = 1 + self._extra_plays(ally, card, target)
         self._spend_on_play(ally, card)
+        if getattr(card_id, "turn_cost_cap", None) is not None:
+            # "This turn, or until played": played, the cap is gone.
+            card_id.turn_cost_cap = None
         results = []
         exhausted = False
 
         for index in range(plays):
             self._play_serial += 1
+            # Counted as it starts, as the game's CardPlaysStarted: what
+            # Normality, Sloth and Ringing count (_capped).
+            ally.turn_counters["cards_started"] = ally.turn_count("cards_started") + 1
             context = self._context_for(ally, target, x_amount=x_amount)
             context.played = card_id
             context.play_id = self._play_serial
+            hits = _Hits()
             for effect in card.get_effects(context):
                 self._stamp(effect, context.play_id)
+                hits.mark(effect)
                 result = self._resolve(effect)
                 if result is None:
                     continue
@@ -513,10 +631,19 @@ class Combat:
             return extra
         if self._spend_status(ally, "one_two_punch"):
             extra += 1
-        tag = target.get_status("tag_team") if target is not None else None
-        if tag is not None and tag.amount > 0 and tag.source is not ally:
-            tag.amount -= 1
-            extra += 1
+        # Tag Team: an Attack aimed at the marked enemy, or one that hits every
+        # enemy - not a random one (the game's TagTeamPower). Each mark adds
+        # its plays and is used up; the applier's own Attacks never set it off.
+        if card.target_type is TargetType.ENEMY:
+            marked = [target] if target is not None else []
+        elif card.target_type is TargetType.ALL_ENEMIES:
+            marked = [enemy for enemy in self.enemies if enemy.is_alive()]
+        else:
+            marked = []
+        for enemy in marked:
+            tag = enemy.get_status("tag_team")
+            if tag is not None:
+                extra += tag.spend(ally)
         return extra
 
     def _spend_on_play(self, ally, card):
@@ -572,6 +699,8 @@ class Combat:
             waiting = ", ".join(sorted(self.pending_choices))
             raise RuntimeError(f"Still waiting on a choice from {waiting}.")
 
+        self.ended_turn.clear()
+        self.waiting.clear()
         self._tick_statuses(self.allies)
 
         # After the tick, or a status applied here (Doubt) is stripped the
@@ -580,10 +709,16 @@ class Combat:
             if ally.is_alive():
                 self._play_from_exhaust(ally)
                 self._emit(GameEvent.TURN_END, ally)
-        if self.is_over():
+        if self._check_combat_end():
             return               # Howl from Beyond can finish the fight here
 
         self._discard_hands()
+        for ally in self.allies:
+            # A cost set "this turn" (Enlightenment) lapses, wherever the copy is.
+            for pile in (ally.hand, ally.draw_pile, ally.discard_pile, ally.exhaust_pile):
+                for ref in pile:
+                    if getattr(ref, "turn_cost_cap", None) is not None:
+                        ref.turn_cost_cap = None
 
         self.phase = CombatPhase.ENEMY_TURN
         self._run_enemy_turn()
@@ -591,7 +726,7 @@ class Combat:
             return
         # The game's AfterSideTurnEnd for the enemy side: Territorial.
         self._emit(GameEvent.ENEMY_TURN_END)
-        if self.is_over():
+        if self._check_combat_end():
             return
 
         self._tick_statuses(self.enemies)
@@ -609,6 +744,9 @@ class Combat:
         for ally in self.allies:
             if ally.is_alive():
                 ally.start_turn()
+                # Hello World's card and a returning Bolas arrive first, so
+                # they take hand room and are not drawn (the game's BeforeHandDraw).
+                self._emit(GameEvent.BEFORE_HAND_DRAW, ally)
                 self._turn_draw(ally)
                 self._emit(GameEvent.TURN_START, ally)
         self._drain_asks()
@@ -641,9 +779,11 @@ class Combat:
         data["hand_text"] = [card_text(create_card(c), ally, blocks[i])
                              for i, c in enumerate(ally.hand)]
         data["piles"] = self.pile_view(ally)
-        # Every play, end turn or answer they may send now: the mask an agent
-        # picks from, and what an analyzer compares a choice against.
+        # Every play, end turn, wait or answer they may send now: the mask an
+        # agent picks from, and what an analyzer compares a choice against.
         data["legal_actions"] = self.legal_actions(ally)
+        data["ended_turn"] = ally.unit_id in self.ended_turn
+        data["waiting"] = ally.unit_id in self.waiting
         return data
 
     def hand_blocks(self, ally):
@@ -714,15 +854,13 @@ class Combat:
     def hand_costs(self, ally):
         """Per card in hand, the cost the game prints on it right now: a
         number, "X" for an X-cost card, or None for one that cannot be played.
-        A free grant (Infernal Blade, Distraction) shows 0, as play_card
-        charges it."""
+        A free copy (Infernal Blade, Distraction) shows 0, or more under
+        Tangled, as play_card charges it."""
         costs = []
         for card_id in ally.hand:
             card = create_card(card_id)
             if not card.properties.playable:
                 costs.append(None)
-            elif self._free_bucket(ally, card_id) is not None:
-                costs.append(0)
             elif card.cost == Card.X_COST:
                 costs.append(Card.X_COST)
             else:
@@ -732,9 +870,10 @@ class Combat:
     def legal_actions(self, ally):
         """Everything `ally` may do right now, each shaped like the message
         that does it: {"type": "play_card", "hand_index", "target_id"},
-        {"type": "end_turn"}, and {"type": "choose", "option_index"} - STOP
-        (-1) for an "up to N" question. The checks are play_card's, in its
-        order, so an action listed is accepted and any other is refused.
+        {"type": "end_turn"}, {"type": "wait"} (may_wait), and
+        {"type": "choose", "option_index"} - STOP (-1) for an "up to N"
+        question. The checks are play_card's, in its order, so an action
+        listed is accepted and any other is refused.
 
         A card that picks its own target (Self, All, Random) is one action
         with target_id None; one sent anyway is ignored. Nothing is rolled:
@@ -751,8 +890,7 @@ class Combat:
             return []
 
         actions = []
-        cap = self._play_cap(ally)
-        if cap is None or ally.turn_count("cards_played") < cap:
+        if not self._capped(ally):
             locked = self._must_play_first(ally)
             for index, card_id in enumerate(ally.hand):
                 card = create_card(card_id)
@@ -760,14 +898,15 @@ class Combat:
                     continue
                 if locked is not None and locked is not card_id:
                     continue
-                if not card.playable_now(ally):
+                if not card.playable_now(ally) or self._forbidden(ally, card):
                     continue
-                free = self._free_bucket(ally, card_id) is not None
-                if not free and ally.energy < self.card_cost(ally, card):
+                if ally.energy < self.card_cost(ally, card):
                     continue
                 actions.extend({"type": "play_card", "hand_index": index, "target_id": target_id}
                                for target_id in self._legal_targets(card, ally))
         actions.append({"type": "end_turn"})
+        if self.may_wait(ally):
+            actions.append({"type": "wait"})
         return actions
 
     def _legal_targets(self, card, ally):
@@ -874,11 +1013,13 @@ class Combat:
             if not ask.can_stop:
                 raise ValueError("This question needs an answer; it cannot be stopped.")
             del self.pending_choices[ally.unit_id]
+            self.waiting.clear()
             return self._drain_asks()
         if not (0 <= option_index < len(ask.options)):
             raise IndexError(f"option_index {option_index} out of range.")
 
         del self.pending_choices[ally.unit_id]
+        self.waiting.clear()
         results = self._apply_choice(ask, ask.options[option_index])
         results.extend(self._drain_asks())
         return results
@@ -890,6 +1031,7 @@ class Combat:
         """A player has left: answer what they were asked, and whatever they
         are asked from now on, at random."""
         self.unattended.add(ally.unit_id)
+        self.waiting.clear()       # whoever waited on them looks again
         results = []
         ask = self.pending_choices.pop(ally.unit_id, None)
         if ask is not None:
@@ -979,7 +1121,8 @@ class Combat:
             # as an attack.
             if effect.is_attack:
                 self._emit(GameEvent.ATTACKED, target,
-                           amount=result["amount"], attacker=effect.source)
+                           amount=result["amount"], attacker=effect.source,
+                           hit=getattr(effect, "hit", None))
             if result["amount"] > 0:
                 self._emit(GameEvent.HP_LOST, target, amount=result["amount"])
         elif eid == "instant_hp_loss":
@@ -987,7 +1130,8 @@ class Combat:
                 self._emit(GameEvent.HP_LOST, target, amount=result["amount"])
         elif eid == "instant_block":
             if result["amount"] > 0:
-                self._emit(GameEvent.BLOCK_GAINED, target, amount=result["amount"])
+                self._emit(GameEvent.BLOCK_GAINED, target, amount=result["amount"],
+                           beacons=getattr(effect, "beacons", ()))
         elif eid == "instant_exhaust":
             for card_id in result["card_ids"]:
                 self._emit(GameEvent.CARD_EXHAUSTED, target, card=create_card(card_id))
@@ -1017,11 +1161,11 @@ class Combat:
             subject.combat_counters[key] = subject.combat_count(key) + 1
 
         if event is GameEvent.ATTACKED and subject is not None:
-            # Deduped: Gang Up pays per attacker, not per hit.
+            # One entry per hit, as the game's DamageReceivedEntry: Gang Up
+            # pays for every hit a teammate landed, a Twin Strike twice.
             attacker = payload.get("attacker")
-            seen = subject.turn_counters.setdefault("attacked_by", [])
-            if attacker is not None and attacker not in seen:
-                seen.append(attacker)
+            if attacker is not None:
+                subject.turn_counters.setdefault("attacked_by", []).append(attacker)
 
         if event is GameEvent.CARD_EXHAUSTED:
             # By anyone, for a card that counts every exhaust in the fight.
@@ -1029,11 +1173,20 @@ class Combat:
                 self.combat_counters.get("cards_exhausted", 0) + 1)
 
         if event is GameEvent.CARD_PLAYED and subject is not None:
-            # Juggling and Stomp count Attacks, not cards.
+            # Juggling and Stomp count Attacks, not cards; Smoggy, Skills.
             played = payload.get("card")
             if played is not None and played.card_type is CardType.ATTACK:
                 subject.turn_counters["attacks_played"] = (
                     subject.turn_count("attacks_played") + 1)
+            if played is not None and played.card_type is CardType.SKILL:
+                subject.turn_counters["skills_played"] = (
+                    subject.turn_count("skills_played") + 1)
+            # By anyone on the team, kept on every player so a card in hand
+            # can read it: Gold Axe counts each card played in the fight (the
+            # game's CardPlaysFinished).
+            for ally in self.allies:
+                ally.combat_counters["team_cards_played"] = (
+                    ally.combat_count("team_cards_played") + 1)
 
         payload["phase"] = self.phase.name
         produced = []
@@ -1110,17 +1263,6 @@ class Combat:
         )
 
     @staticmethod
-    def _free_bucket(ally, card_id):
-        """The tally holding a free play of this card, or None if it costs.
-
-        This-turn is checked first so a card granted free by both keeps the
-        longer-lived combat grant for later."""
-        for bucket in (ally.free_this_turn, ally.free_this_combat):
-            if card_id in bucket:
-                return bucket
-        return None
-
-    @staticmethod
     def _validated_target(card, target, pool, noun):
         if target is None:
             raise ValueError(f"{card.name} requires a target.")
@@ -1159,8 +1301,10 @@ class Combat:
             enemy.clear_block()
             # No target: every move lands on every player (see _scripted.Move).
             context = self._context_for(enemy)
+            hits = _Hits()
             for effect in enemy.get_effects(context):
                 self._intercept(effect)
+                hits.mark(effect)
                 self._resolve(effect)
             if self._check_combat_end():
                 return
@@ -1181,7 +1325,7 @@ class Combat:
             if ally is victim or not ally.is_alive():
                 continue
             covering = ally.get_status("intercepting")
-            if covering is not None and covering.amount > 0:
+            if covering is not None and covering.amount > 0 and victim in covering.covered:
                 effect.target = ally
                 return
 
@@ -1260,6 +1404,10 @@ class Combat:
         return drawn
 
     def _check_combat_end(self):
+        # Deaths first: one can bring enemies in (Phrog Parasite's Wrigglers,
+        # the Gremlin Merc's gremlins) or take Minions out with their leader,
+        # and the others may react (Corpse Slug's Ravenous).
+        self._resolve_deaths()
         if not any(enemy.is_alive() for enemy in self.enemies):
             self.phase = CombatPhase.OVER
             self.result = CombatResult.VICTORY

@@ -25,6 +25,24 @@ from ..Units.Enemies.byrdonis import Byrdonis
 from ..Units.Enemies.the_kin import KinPriest, KinFollower
 from ..Units.Enemies.vantom import Vantom
 from ..Units.Enemies.ceremonial_beast import CeremonialBeast
+from ..Units.Enemies.seapunk import Seapunk
+from ..Units.Enemies.sewer_clam import SewerClam
+from ..Units.Enemies.haunted_ship import HauntedShip
+from ..Units.Enemies.sludge_spinner import SludgeSpinner
+from ..Units.Enemies.punch_construct import PunchConstruct
+from ..Units.Enemies.cultists import CalcifiedCultist, DampCultist
+from ..Units.Enemies.toadpole import Toadpole
+from ..Units.Enemies.corpse_slug import CorpseSlug
+from ..Units.Enemies.fossil_stalker import FossilStalker
+from ..Units.Enemies.gremlins import GremlinMerc, SneakyGremlin, FatGremlin
+from ..Units.Enemies.terror_eel import TerrorEel
+from ..Units.Enemies.skulking_colony import SkulkingColony
+from ..Units.Enemies.phantasmal_gardener import PhantasmalGardener
+from ..Units.Enemies.living_fog import LivingFog, GasBomb
+from ..Units.Enemies.two_tailed_rat import TwoTailedRat
+from ..Units.Enemies.lagavulin_matriarch import LagavulinMatriarch
+from ..Units.Enemies.soul_fysh import SoulFysh
+from ..Units.Enemies.waterfall_giant import WaterfallGiant
 
 _ALLY_CLASSES = {}
 _ENEMY_CLASSES = {}
@@ -74,4 +92,11 @@ for _enemy in (LeafSlimeSmall, LeafSlimeMedium, TwigSlimeSmall, TwigSlimeMedium,
                Flyconid, SlitheringStrangler, VineShambler, ShrinkerBeetle, Mawler,
                CubexConstruct, Inklet, Fogmog, EyeWithTeeth, PhrogParasite, BygoneEffigy,
                Byrdonis, KinPriest, KinFollower, Vantom, CeremonialBeast):
+    register_enemy(_enemy)
+# Act 1 (Underdocks)
+for _enemy in (Seapunk, SewerClam, HauntedShip, SludgeSpinner, PunchConstruct,
+               CalcifiedCultist, DampCultist, Toadpole, CorpseSlug, FossilStalker,
+               GremlinMerc, SneakyGremlin, FatGremlin, TerrorEel, SkulkingColony,
+               PhantasmalGardener, LivingFog, GasBomb, TwoTailedRat,
+               LagavulinMatriarch, SoulFysh, WaterfallGiant):
     register_enemy(_enemy)

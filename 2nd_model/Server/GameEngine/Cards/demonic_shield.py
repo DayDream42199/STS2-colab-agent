@@ -6,6 +6,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 
 class DemonicShield(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     HP_LOSS = 1
 
     def __init__(self):

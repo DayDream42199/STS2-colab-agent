@@ -12,9 +12,9 @@ class BeatDown(Card):
             name = "Beat Down",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 3,
-            target_type = TargetType.SELF
+            target_type = TargetType.RANDOM_ENEMY
         )
 
     def get_effects(self, context):
@@ -23,7 +23,8 @@ class BeatDown(Card):
         from ..Registry.card_registry import create_card
 
         attacks = [c for c in context.source.discard_pile
-                   if create_card(c).card_type is CardType.ATTACK]
+                   if create_card(c).card_type is CardType.ATTACK
+                   and create_card(c).properties.playable]
         if not attacks:
             return []
         picked = (attacks if len(attacks) <= self.COUNT

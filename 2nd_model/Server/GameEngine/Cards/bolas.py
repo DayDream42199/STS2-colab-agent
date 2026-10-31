@@ -13,14 +13,14 @@ class Bolas(Card):
             name = "Bolas",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 0,
             target_type = TargetType.ENEMY
         )
 
     def get_effects(self, context):
-        # ReturnToHand holds this exact copy and claims it on the way out, so
-        # it never reaches the discard pile.
+        # It goes to the discard pile as usual; ReturnToHand holds this exact
+        # copy and brings it back next turn from wherever it is by then.
         return [
             InstantDamage(
                 source=context.source, target=context.target,

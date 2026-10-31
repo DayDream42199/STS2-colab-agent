@@ -25,6 +25,13 @@ class Intangible(StatusEffect):
         pass  # survives into the enemy phase; see the class docstring
 
     def on_event(self, event, context):
+        if context.source not in context.all_allies:
+            # On an enemy (Soul Fysh's Fade) it counts down as the enemies'
+            # turn ends - the game's AfterSideTurnEnd, enemy side - so 2 cover
+            # the players' next turn and no more.
+            if event is GameEvent.ENEMY_TURN_END:
+                self.amount -= 1
+            return None
         if event is not GameEvent.TURN_START:
             return None
         if context.target is not context.source:

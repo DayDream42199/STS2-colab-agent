@@ -51,6 +51,7 @@ SELF, TEAM, DEBUFF, NONE = "self", "team", "debuff", "none"
 STATUS_ROLES = {
     "aggression": SELF,             # Attacks back from your discard
     "artifact": SELF,
+    "asleep": SELF,                 # Lagavulin Matriarch: asleep until hit or three turns
     "automation": SELF,             # energy every 10 draws
     "barricade": SELF,              # your Block stays
     "beacon_of_hope": TEAM,         # the other players gain half your Block
@@ -71,7 +72,6 @@ STATUS_ROLES = {
     "delayed_energy": SELF,
     "demon_form": SELF,             # Strength each turn
     "dexterity": SELF,
-    "enlightenment": SELF,
     "entropy": SELF,
     "exposed": DEBUFF,
     "fasten": SELF,
@@ -80,6 +80,7 @@ STATUS_ROLES = {
     "frail": DEBUFF,
     "free_attack": SELF,
     "gambit": DEBUFF,               # die to unblocked damage (the game's TheGambit, a debuff)
+    "hardened_shell": SELF,         # Skulking Colony: loses at most so much HP a turn
     "hello_world": SELF,
     "hellraiser": (TEAM, SELF),     # plays your Strikes at enemies as they are drawn
     "illusion": NONE,               # an enemy's comeback
@@ -102,22 +103,30 @@ STATUS_ROLES = {
     "protected": SELF,              # half damage (Tank gives it to the others)
     "pyre": SELF,
     "rage": SELF,                   # Block per Attack
+    "ravenous": SELF,               # Corpse Slug: Strength when another enemy dies
     "rebound": SELF,
     "return_to_hand": NONE,         # Bolas / Thrumming Hatchet held until next turn
     "ringing": DEBUFF,              # Beast Cry: one card this turn
+    "ritual": SELF,                 # Strength at the end of every enemy turn
     "rolling_boulder": TEAM,        # damage to every enemy
     "rupture": SELF,
     "sandpit": DEBUFF,
+    "shriek": DEBUFF,               # Terror Eel: stunned once it is down to it
     "shrink": DEBUFF,
+    "skittish": SELF,               # Phantasmal Gardener: Block when an attack gets through
     "slippery": SELF,               # each hit through Block takes only 1 HP
     "slow": DEBUFF,                 # Bygone Effigy: takes more from each card played
+    "smoggy": DEBUFF,               # Living Fog: one Skill a turn
     "stampede": (TEAM, SELF),       # plays one of your Attacks at an enemy
+    "steam_eruption": SELF,         # Waterfall Giant: what it blows for when brought down
     "stored_block": SELF,
     "stratagem": SELF,
     "strength": SELF,
     "strength_loss_this_turn": DEBUFF,
     "strength_this_turn": SELF,
     "stun": DEBUFF,
+    "suck": SELF,                   # Fossil Stalker: Strength per hit that gets through
+    "surprise": NONE,               # Gremlin Merc: two gremlins when it dies
     "tag_team": DEBUFF,             # marks an enemy for your teammates
     "tangled": DEBUFF,
     "tank": TEAM,                   # you take the hits so the others take less
@@ -134,7 +143,8 @@ _FOR_A_TEAMMATE = (TargetType.ALLY, TargetType.ALL_ALLIES, TargetType.RANDOM_ALL
 
 # Results that change the player's own cards - self.
 _CARD_CHANGES = ("instant_add_card", "instant_move_card", "instant_exhaust", "instant_upgrade_card",
-                 "instant_boost_card", "instant_grant_replay", "instant_raise_cost")
+                 "instant_boost_card", "instant_grant_replay", "instant_raise_cost",
+                 "instant_cap_cost")
 
 
 def _roles(status_id):

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from ._card_enums import CardType
 from ._card_properties import CardProperties
-from ._card_ref import bonus_of, cost_bump_of, is_upgraded, replay_of
+from ._card_ref import bonus_of, cost_bump_of, cost_cap_of, is_upgraded, replay_of
 from ._upgrades import upgrade_for
 
 class Card(ABC):
@@ -27,6 +27,14 @@ class Card(ABC):
     # While this sits in hand, no more than this many cards may be played in a
     # turn (Sloth, Normality). The tightest cap held wins.
     PLAY_CAP = None
+
+    # Whether "add a random card" may make this one (the game's
+    # CanBeGeneratedInCombat): Feed, Hand of Greed and Hidden Gem may not.
+    GENERATED_IN_COMBAT = True
+
+    # A co-op card (the game's CardMultiplayerConstraint.MultiplayerOnly):
+    # never made at random in a fight with one player.
+    MULTIPLAYER_ONLY = False
 
     # Charged every turn for every copy in the deck - hand, draw pile or
     # discard pile alike (Mind Rot, Waste Away). Copies stack.
@@ -64,6 +72,8 @@ class Card(ABC):
         self.replay = 0
         # Added to this copy's cost for the combat (Frantic Escape).
         self.cost_bump = 0
+        # The most this copy costs, if something capped it (Enlightenment).
+        self.cost_cap = None
 
     def bind(self, card_ref):
         """Take on the state of the copy being played."""
@@ -71,6 +81,7 @@ class Card(ABC):
         self.bonus_damage = bonus_of(card_ref)
         self.replay = replay_of(card_ref)
         self.cost_bump = cost_bump_of(card_ref)
+        self.cost_cap = cost_cap_of(card_ref)
         if is_upgraded(card_ref):
             self.apply_upgrade()
 

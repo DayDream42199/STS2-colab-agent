@@ -1,4 +1,5 @@
 from ._card import Card
+from ._card_ref import free_copy
 from ._card_enums import CardType, CardClass, CardRarity, TargetType
 from ._card_properties import CardProperties
 from ..Effects.InstantEffects.instant_add_card import InstantAddCard
@@ -23,13 +24,12 @@ class InfernalBlade(Card):
         from ..Registry.card_registry import generatable_card_ids
 
         pool = generatable_card_ids(
-            card_class=CardClass.IRONCLAD, card_type=CardType.ATTACK)
+            card_class=CardClass.IRONCLAD, card_type=CardType.ATTACK,
+            solo=context.solo)
         if not pool:
             return []
         picked = context.rngs.card_generation.choice(pool)
-        # Granted here rather than through an effect, the way Equilibrium sets
-        # retain_hand: the card already knows which id it is adding.
-        context.source.free_this_turn.append(picked)
+        # Free on that copy alone, as the game's SetToFreeThisTurn.
         return [InstantAddCard(
             source=context.source, target=context.source,
-            card_id=picked, pile=InstantAddCard.HAND)]
+            card_id=free_copy(picked), pile=InstantAddCard.HAND)]

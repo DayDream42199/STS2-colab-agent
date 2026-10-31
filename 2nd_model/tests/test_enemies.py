@@ -118,11 +118,11 @@ check("a dead player is not hit, the living ones are",
       [h - p.current_hp for h, p in zip(hp, a)])
 
 c, a, (foe,) = fight("nibbit", players=3)
-a[0].apply_status(Intercepting(source=a[0], target=a[0], amount=1))
+a[0].apply_status(Intercepting(source=a[0], target=a[0], amount=1, covered=a[1]))
 hp = [p.current_hp for p in a]
 pass_turn(c, a)
-check("Intercept takes every teammate's hit: p1 takes 12 x 3, p2 and p3 none",
-      [h - p.current_hp for h, p in zip(hp, a)] == [36, 0, 0],
+check("Intercept takes the covered player's hit: p1 takes 12 x 2, p2 none, p3 its own",
+      [h - p.current_hp for h, p in zip(hp, a)] == [24, 0, 12],
       [h - p.current_hp for h, p in zip(hp, a)])
 
 # ============================================================================

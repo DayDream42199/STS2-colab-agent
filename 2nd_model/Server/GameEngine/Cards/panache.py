@@ -4,6 +4,8 @@ from ..Effects.StatusEffects.panache import Panache as PanacheStatus
 
 
 class Panache(Card):
+    DAMAGE = 10
+
     def __init__(self):
         super().__init__(
             card_id = "panache",
@@ -17,4 +19,4 @@ class Panache(Card):
 
     def get_effects(self, context):
         return [PanacheStatus(
-            source=context.source, target=context.source, amount=1)]
+            source=context.source, target=context.source, amount=self.DAMAGE)]

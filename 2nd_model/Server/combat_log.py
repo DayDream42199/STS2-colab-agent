@@ -17,6 +17,7 @@ up to it. Every line has "seq" (0, 1, 2...), "time" and "event":
     choose        unit_id, role, prompt, option_index, option, options,
                   legal_actions, results, decision
     end_turn      unit_id, role, turn, legal_actions, decision
+    wait          unit_id, role, turn, legal_actions, decision
     round_end     turn
     refused       unit_id, role, message (as the client sent it), error
     error         entry, sid, unit_id, message, error, traceback - an
@@ -32,7 +33,9 @@ up to it. Every line has "seq" (0, 1, 2...), "time" and "event":
 Replay: `python combat_log.py <file>` (from Server/) rebuilds the fight from
 the seed and the recorded actions and checks every turn's state and the end
 against the log. It needs the same cards, enemies and decks as when it was
-recorded; a different deck is reported first.
+recorded; a different deck is reported first. replay() can also run with a
+plugin and a MemoryLog, to see what that plugin would have logged
+(Plugins/history_export.py rebuilds the aura plugin's turns that way).
 """
 import datetime
 import json
@@ -100,6 +103,28 @@ class CombatLog:
             self._file = None
 
 
+class MemoryLog:
+    """A log kept as a list of lines, not a file: what a replay writes when
+    it is given one. Each line goes through JSON, as the file would hold it."""
+    active = True
+    path = None
+
+    def __init__(self):
+        self.tag = None
+        self.lines = []
+        self._closed = False
+
+    def write(self, event, **data):
+        if self._closed:
+            return
+        line = {"seq": len(self.lines), "event": event}
+        line.update(data)
+        self.lines.append(json.loads(json.dumps(line, default=str)))
+
+    def close(self):
+        self._closed = True
+
+
 # --- replay -----------------------------------------------------------------
 
 def read(path):
@@ -112,10 +137,12 @@ def _same(a, b):
     return json.loads(json.dumps(a, default=str)) == json.loads(json.dumps(b, default=str))
 
 
-def replay(lines, combat_factory):
+def replay(lines, combat_factory, plugin=None, log=None):
     """Play a logged fight again from its seed and actions. Returns a list of
     differences: empty means every turn's state and the outcome came out
-    exactly as logged."""
+    exactly as logged. With a plugin (plugin_host.PluginGuard) and a log
+    (MemoryLog), the replay runs with that plugin on and writes its own log,
+    plugin lines included."""
     from session import Session                       # here: session imports this module
     from Protocol.protocol import encode
     from Protocol.enums import ClientMessage
@@ -126,7 +153,8 @@ def replay(lines, combat_factory):
     if start.get("seed") is None:
         return ["the log has no seed (the session was given its own rng), so it cannot be replayed"]
 
-    session = Session(combat_factory, required_players=start["required_players"], seed=start["seed"])
+    session = Session(combat_factory, required_players=start["required_players"], seed=start["seed"],
+                      plugin=plugin, combat_log=log)
     session.ALLY_TYPE_ID = start["ally_type"]
     session.ENEMY_TYPE_IDS = tuple(start["enemy_types"])
     session.ACT = start["act"]
@@ -182,6 +210,8 @@ def replay(lines, combat_factory):
             act(sid_of[line["unit_id"]], ClientMessage.CHOOSE, option_index=line["option_index"])
         elif event == "end_turn":
             act(sid_of[line["unit_id"]], ClientMessage.END_TURN)
+        elif event == "wait":
+            act(sid_of[line["unit_id"]], ClientMessage.WAIT)
         elif event == "left":
             session.remove_player(sid_of[line["unit_id"]])
         check()

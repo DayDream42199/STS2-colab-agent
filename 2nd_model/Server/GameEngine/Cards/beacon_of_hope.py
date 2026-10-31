@@ -4,14 +4,15 @@ from ..Effects.StatusEffects.beacon_of_hope import BeaconOfHope as BeaconOfHopeS
 
 
 class BeaconOfHope(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     def __init__(self):
         super().__init__(
             card_id = "beacon_of_hope",
             name = "Beacon of Hope",
             card_type = CardType.POWER,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
-            cost = 2,
+            rarity = CardRarity.RARE,
+            cost = 1,
             target_type = TargetType.SELF
         )
 

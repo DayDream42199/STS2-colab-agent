@@ -4,6 +4,7 @@ from ._card_properties import CardProperties
 
 
 class Sloth(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     PLAY_CAP = 3
 
     def __init__(self):

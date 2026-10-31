@@ -5,7 +5,9 @@ from ..Effects.StatusEffects.exposed import Exposed
 
 
 class Knockdown(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     DAMAGE = 10
+    KNOCKDOWN = 2                   # the damage multiplier for the others
 
     def __init__(self):
         super().__init__(
@@ -13,7 +15,7 @@ class Knockdown(Card):
             name = "Knockdown",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 3,
             target_type = TargetType.ENEMY
         )
@@ -22,5 +24,6 @@ class Knockdown(Card):
         return [
             InstantDamage(
                 source=context.source, target=context.target, amount=self.DAMAGE),
-            Exposed(source=context.source, target=context.target, amount=1),
+            Exposed(source=context.source, target=context.target,
+                    amount=self.KNOCKDOWN),
         ]

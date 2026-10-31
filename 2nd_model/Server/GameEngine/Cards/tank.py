@@ -5,6 +5,7 @@ from ..Effects.StatusEffects.protected import Protected
 
 
 class Tank(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     def __init__(self):
         super().__init__(
             card_id = "tank",

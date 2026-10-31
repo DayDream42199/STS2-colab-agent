@@ -3,10 +3,11 @@ from ..InstantEffects.instant_move_card import InstantMoveCard
 
 
 class Nostalgia(StatusEffect):
-    """The first Attack or Skill you play each turn goes on top of your Draw
-    Pile instead of to the discard."""
+    """The first `amount` Attacks or Skills you play each turn go on top of
+    your Draw Pile instead of to the discard.
 
-    COUNTER = "nostalgia_used"
+    As the game's NostalgiaPower, it counts the Attacks and Skills played this
+    turn, not the ones it moved: an Exhausted first Skill still uses it up."""
 
     def __init__(self, source, target, amount):
         super().__init__("nostalgia")
@@ -23,7 +24,8 @@ class Nostalgia(StatusEffect):
         if card.card_type not in (CardType.ATTACK, CardType.SKILL):
             return None
         owner = context.source
-        if owner.turn_count(self.COUNTER):
+        # Asked before this play's CARD_PLAYED, so it counts the ones before.
+        played = owner.turn_count("attacks_played") + owner.turn_count("skills_played")
+        if played >= self.amount:
             return None
-        owner.turn_counters[self.COUNTER] = 1
         return InstantMoveCard.DRAW

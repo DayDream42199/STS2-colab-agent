@@ -3,19 +3,25 @@ from ...Events.game_event import GameEvent
 
 
 class Intercepting(StatusEffect):
-    """Attacks aimed at your teammates hit you instead.
+    """Attacks aimed at the players you cover hit you instead.
 
     Clears on the owner's next TURN_START, not the end-of-turn tick, which runs
     before the enemy phase - it would be gone before anything attacked.
 
-    It covers every other living ally rather than a list snapshotted when it
-    was played: the roster is fixed for a combat, so the two are the same."""
+    Only the player each Intercept was played on is covered, as the game's
+    CoveredPower is applied to the target alone; two Intercepts on two
+    teammates cover both."""
 
-    def __init__(self, source, target, amount):
+    def __init__(self, source, target, amount, covered=None):
         super().__init__("intercepting")
         self.source = source
         self.target = target
         self.amount = amount
+        self.covered = [covered] if covered is not None else []
+
+    def absorb(self, other):
+        self.amount = max(self.amount, other.amount)
+        self.covered += [unit for unit in other.covered if unit not in self.covered]
 
     def on_owner_turn_end(self):
         pass  # survives into the enemy phase; see the class docstring

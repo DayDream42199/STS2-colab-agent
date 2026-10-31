@@ -52,8 +52,13 @@ def attack(name, damage, hits=1, block=0, inflict=None, gain=None):
     def effects(enemy, context):
         out = []
         targets = players(context)
-        for _ in range(hits):
-            out.extend(InstantDamage(source=enemy, target=p, amount=damage) for p in targets)
+        for hit in range(hits):
+            for p in targets:
+                # Which hit of the attack it is, for whoever counts hits rather
+                # than targets (Fossil Stalker's Suck).
+                damage_effect = InstantDamage(source=enemy, target=p, amount=damage)
+                damage_effect.hit = hit
+                out.append(damage_effect)
         if inflict is not None:
             status, amount = inflict
             out.extend(status(source=enemy, target=p, amount=amount) for p in targets)
@@ -191,17 +196,24 @@ class ScriptedEnemy(Enemy):
             # The game's loop then falls through to its first branch, since
             # 0 - 0 <= 0 passes on the first test; so does this.
             return branches[0].move
-        rng = self.rng
-        if rng is None:
-            # The fight's MonsterAi stream, as the game rolls moves.
-            rngs = getattr(self.context, "rngs", None)
-            rng = rngs.monster_ai if rngs is not None else self.context.rng
-        roll = rng.random() * total
+        roll = self._move_rng().random() * total
         for branch, weight in zip(branches, weights):
             roll -= weight
             if weight > 0 and roll <= 0:
                 return branch.move
         return next(b.move for b, w in zip(branches, weights) if w > 0)
+
+    def choose_index(self, n):
+        """A random number below `n`, from the same stream as `choose` - for a
+        start an encounter picks at random (Corpse Slugs)."""
+        return self._move_rng().randrange(n)
+
+    def _move_rng(self):
+        if self.rng is not None:
+            return self.rng
+        # The fight's MonsterAi stream, as the game rolls moves.
+        rngs = getattr(self.context, "rngs", None)
+        return rngs.monster_ai if rngs is not None else self.context.rng
 
     def same_kind_index(self, context):
         """Where this enemy stands among the living enemies of its own kind -
@@ -232,6 +244,14 @@ class ScriptedEnemy(Enemy):
                              if not status.IS_DEBUFF or sid in self.TEMPORARY_DEBUFFS}
             self.intent = {"type": "heal", "name": "Revive", "amount": 0, "hits": 1, "block": 0}
         return []
+
+    def escape(self):
+        """Leave the fight (Fat Gremlin's Flee): out of it like the dead, but
+        not killed - no death of its own runs, and nothing reacts to one."""
+        self.escaped = True
+        self.current_hp = 0
+        self.death_resolved = True
+        self.intent = None
 
     def revive(self):
         """Back at full HP. Statuses are kept; Combat chooses the next intent

@@ -4,7 +4,8 @@ from ..InstantEffects.instant_add_card import InstantAddCard
 
 
 class Calamity(StatusEffect):
-    """Whenever you play an Attack, add a random Attack into your Hand."""
+    """Whenever you play an Attack, add `amount` random Attacks into your Hand
+    (the game's CalamityPower: two Calamities, two Attacks)."""
 
     def on_owner_turn_end(self):
         pass  # a power lasts the whole combat
@@ -29,9 +30,11 @@ class Calamity(StatusEffect):
         if card is None or card.card_type is not CardType.ATTACK:
             return None
         pool = generatable_card_ids(
-            card_class=CardClass.IRONCLAD, card_type=CardType.ATTACK)
+            card_class=CardClass.IRONCLAD, card_type=CardType.ATTACK,
+            solo=context.solo)
         if not pool:
             return None
         return [InstantAddCard(
             source=context.source, target=context.source,
-            card_id=context.rngs.card_generation.choice(pool), pile=InstantAddCard.HAND)]
+            card_id=context.rngs.card_generation.choice(pool), pile=InstantAddCard.HAND)
+            for _ in range(self.amount)]

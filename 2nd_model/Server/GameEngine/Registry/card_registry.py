@@ -1,4 +1,5 @@
-from ..Cards._card_enums import CardClass, CardRarity
+from ..Cards._card_enums import CardClass, CardRarity, CardType
+from ..Cards._card_ref import is_upgraded
 from ..Cards.strike import Strike
 from ..Cards.defend import Defend
 from ..Cards.bash import Bash
@@ -235,39 +236,80 @@ def create_card(card_id):
     return card
 
 
+def can_upgrade(card_id):
+    """Whether an Upgrade would do anything to this copy: not one already
+    upgraded, and never a Status or a Curse (the game's IsUpgradable - their
+    MaxUpgradeLevel is 0)."""
+    if is_upgraded(card_id):
+        return False
+    return create_card(card_id).card_type not in (CardType.STATUS, CardType.CURSE)
+
+
 def known_card_ids():
     return sorted(_CARD_CLASSES)
 
 
-# What "a random card" may be: never a starter, an Ancient, or a card you are
-# only ever handed (Burn, Wound, a Curse, Giant Rock).
+# What "a random card" may be: never a starter, an Ancient, an Event card, or
+# a card you are only ever handed (Burn, Wound, a Curse, Giant Rock).
 _GENERATABLE_CLASSES = (CardClass.IRONCLAD, CardClass.COLORLESS)
 _GENERATABLE_RARITIES = (CardRarity.COMMON, CardRarity.UNCOMMON, CardRarity.RARE)
 
 _generatable_cache = {}
 
 
-def generatable_card_ids(card_class=None, card_type=None, rarity=None):
+def generatable_card_ids(card_class=None, card_type=None, rarity=None, solo=False):
     """The card ids that "add a random Attack" and friends may produce.
 
     Returns ids, not cards - the caller picks with its own rng, so the choice
-    stays with the card. Filters are optional and combine.
+    stays with the card. Filters are optional and combine. `solo`: a fight with
+    one player, where the co-op cards are left out (CardFactory's
+    FilterForPlayerCount).
     """
-    key = (card_class, card_type, rarity)
+    key = (card_class, card_type, rarity, solo)
     cached = _generatable_cache.get(key)
     if cached is None:
         cached = tuple(
             card_id for card_id in sorted(_CARD_CLASSES)
-            if _is_generatable(create_card(card_id), card_class, card_type, rarity)
+            if _is_generatable(create_card(card_id), card_class, card_type, rarity, solo)
         )
         _generatable_cache[key] = cached
     return cached
 
 
-def _is_generatable(card, card_class, card_type, rarity):
+def transform_card_ids(card_id, solo=False):
+    """What `card_id` may turn into when it is Transformed in a fight: the
+    game's CardFactory.GetDefaultTransformationOptions.
+
+    A card of its own pool, any but itself: a Status becomes another Status,
+    a Curse another Curse; anything else a Common, Uncommon or Rare of its
+    pool - the colorless one for an Event, Ancient or token card. Only cards
+    "add a random card" may make, and no co-op card in a solo fight."""
+    card = create_card(card_id)
+    if card.card_class in (CardClass.STATUS, CardClass.CURSE):
+        pool, rarities = card.card_class, None
+    elif card.card_class is CardClass.TOKEN or card.rarity in (CardRarity.EVENT, CardRarity.ANCIENT):
+        pool, rarities = CardClass.COLORLESS, _GENERATABLE_RARITIES
+    else:
+        pool, rarities = card.card_class, _GENERATABLE_RARITIES
+    options = []
+    for other_id in sorted(_CARD_CLASSES):
+        other = create_card(other_id)
+        if other_id == str(card_id) or other.card_class is not pool:
+            continue
+        if rarities is not None and other.rarity not in rarities:
+            continue
+        if not other.GENERATED_IN_COMBAT or (solo and other.MULTIPLAYER_ONLY):
+            continue
+        options.append(other_id)
+    return options
+
+
+def _is_generatable(card, card_class, card_type, rarity, solo):
     if card.card_class not in _GENERATABLE_CLASSES:
         return False
     if card.rarity not in _GENERATABLE_RARITIES:
+        return False
+    if not card.GENERATED_IN_COMBAT or (solo and card.MULTIPLAYER_ONLY):
         return False
     if card_class is not None and card.card_class is not card_class:
         return False

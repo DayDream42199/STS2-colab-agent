@@ -5,7 +5,9 @@ from ..InstantEffects.instant_damage import InstantDamage
 
 class Caltrops(StatusEffect):
     """Whenever you are attacked, deal damage back. Unlike Flame Barrier this
-    is a Power: it lasts the whole combat rather than one turn."""
+    is a Power: it lasts the whole combat rather than one turn. The game's
+    ThornsPower - Toadpole's Thorns too. The damage back is unpowered: no
+    Strength on it, and it is nobody's attack, so it sets off no Thorns."""
 
     def __init__(self, source, target, amount):
         super().__init__("caltrops")
@@ -22,7 +24,7 @@ class Caltrops(StatusEffect):
         if context.target is not context.source:
             return None
         attacker = context.payload.get("attacker")
-        if attacker is None or not attacker.is_alive():
+        if attacker is None or not attacker.is_alive() or self.amount <= 0:
             return None
         return [InstantDamage(
-            source=context.source, target=attacker, amount=self.amount)]
+            source=context.source, target=attacker, amount=self.amount, is_attack=False)]

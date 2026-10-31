@@ -16,7 +16,7 @@ class Whistle(Card):
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
             rarity = CardRarity.ANCIENT,
-            cost = 2,
+            cost = 3,
             target_type = TargetType.ENEMY,
             properties = CardProperties(exhaust=True)
         )

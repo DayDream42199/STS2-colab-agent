@@ -14,17 +14,19 @@ class Volley(Card):
             card_class = CardClass.COLORLESS,
             rarity = CardRarity.UNCOMMON,
             cost = Card.X_COST,
-            target_type = TargetType.SELF
+            target_type = TargetType.RANDOM_ENEMY
         )
 
     def get_effects(self, context):
-        # Re-rolled per hit, so the shots can land on different enemies.
-        effects = []
-        for _ in range(context.x_amount):
+        # Re-rolled per hit, so the shots can land on different enemies. One
+        # at a time: each shot picks from the enemies still standing once the
+        # last one has landed, as the game's AttackCommand does.
+        for hit in range(context.x_amount):
             living = [e for e in context.all_enemies if e.is_alive()]
             if not living:
-                break
-            effects.append(InstantDamage(
+                return
+            effect = InstantDamage(
                 source=context.source, target=context.rngs.targets.choice(living),
-                amount=self.DAMAGE))
-        return effects
+                amount=self.DAMAGE)
+            effect.hit = hit           # its own hit, whoever it lands on (Combat._Hits)
+            yield effect

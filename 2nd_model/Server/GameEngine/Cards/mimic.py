@@ -5,13 +5,14 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 
 class Mimic(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     def __init__(self):
         super().__init__(
             card_id = "mimic",
             name = "Mimic",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 1,
             target_type = TargetType.ALLY,
             properties = CardProperties(exhaust=True)

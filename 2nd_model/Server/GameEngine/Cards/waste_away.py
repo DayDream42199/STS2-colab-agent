@@ -4,6 +4,7 @@ from ._card_properties import CardProperties
 
 
 class WasteAway(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     ENERGY_PENALTY = 1
 
     def __init__(self):

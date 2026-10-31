@@ -4,6 +4,7 @@ from ._card_properties import CardProperties
 
 
 class MindRot(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     DRAW_PENALTY = 1
 
     def __init__(self):

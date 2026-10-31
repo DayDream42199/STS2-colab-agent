@@ -7,8 +7,9 @@ from ..Effects.StatusEffects.delayed_energy import DelayedEnergy
 
 
 class Relax(Card):
-    BLOCK = 16
-    TURNS = 1
+    BLOCK = 15
+    CARDS = 2
+    ENERGY = 2
 
     def __init__(self):
         super().__init__(
@@ -27,7 +28,7 @@ class Relax(Card):
             InstantBlock(
                 source=context.source, target=context.source, amount=self.BLOCK),
             DelayedDraw(
-                source=context.source, target=context.source, amount=self.TURNS),
+                source=context.source, target=context.source, amount=self.CARDS),
             DelayedEnergy(
-                source=context.source, target=context.source, amount=self.TURNS),
+                source=context.source, target=context.source, amount=self.ENERGY),
         ]

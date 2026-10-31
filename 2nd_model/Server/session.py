@@ -74,7 +74,6 @@ class Session:
 
         self.combat = None
         self.players = {}
-        self.ready = set()
         self._joined_count = 0
         # The optional plugin (plugin_host.py) and what each client said it is.
         self.plugin = plugin if plugin is not None else NullPlugin()
@@ -104,6 +103,15 @@ class Session:
 
     def ally_for(self, sid):
         return self.players.get(sid)
+
+    @property
+    def ready(self):
+        """The sids of the players who have ended this turn. Combat keeps who
+        has ended (Combat.ended_turn); this is it by connection."""
+        if self.combat is None:
+            return set()
+        return {sid for sid, ally in self.players.items()
+                if ally.unit_id in self.combat.ended_turn}
 
     # --- connection handling -------------------------------------------
 
@@ -139,7 +147,6 @@ class Session:
     @_guarded
     def remove_player(self, sid):
         ally = self.players.pop(sid, None)
-        self.ready.discard(sid)
         self.roles.pop(sid, None)
         if ally is None:
             return []
@@ -163,6 +170,10 @@ class Session:
                 ServerMessage.EFFECTS, source=ally.unit_id, action="left",
                 results=results)))
             outbound.append((BROADCAST, self._state_message()))
+        if self.is_running():
+            # Who is still to act has changed: a player waiting on the one who
+            # left decides again.
+            outbound.append((BROADCAST, self._ready_message()))
         outbound.extend(self._advance_if_all_ready())
         return outbound
 
@@ -267,6 +278,8 @@ class Session:
                 return self._handle_play_card(sid, payload)
             if message_type is ClientMessage.END_TURN:
                 return self._handle_end_turn(sid, payload)
+            if message_type is ClientMessage.WAIT:
+                return self._handle_wait(sid, payload)
             if message_type is ClientMessage.CHOOSE:
                 return self._handle_choose(sid, payload)
         except (ValueError, IndexError, KeyError, RuntimeError) as error:
@@ -313,7 +326,6 @@ class Session:
         played = self._card_before_play(ally, hand_index, target_id)
         results = self.combat.play_card(ally, hand_index, target=target)
 
-        self.ready.discard(sid)
         self.log.write("play", **self._with_decision(
             dict(played, role=self._role(sid), results=results), payload))
         if self.plugin.active:
@@ -397,31 +409,44 @@ class Session:
         return outbound
 
     def _handle_end_turn(self, sid, payload=None):
-        if self.combat.phase.name != PLAYER_TURN:
-            return [(sid, self._error("It is not the player turn."))]
-        if self.combat.choice_for(self.players[sid]) is not None:
-            return [(sid, self._error("Answer the choice in front of you first."))]
-        if not self.players[sid].is_alive():
-            # As play_card refuses them: legal_actions lists nothing for them.
-            return [(sid, self._error(f"{self.players[sid].unit_id} has been defeated and cannot act."))]
-
-        legal = self.combat.legal_actions(self.players[sid]) if self.log.active else None
-        self.ready.add(sid)
+        ally = self.players[sid]
+        legal = self.combat.legal_actions(ally) if self.log.active else None
+        # Refused as play_card refuses: not the player turn, a question to
+        # answer first, or defeated (legal_actions lists nothing for them).
+        self.combat.end_turn(ally)
         self.log.write("end_turn", **self._with_decision({
-            "unit_id": self.players[sid].unit_id, "role": self._role(sid),
+            "unit_id": ally.unit_id, "role": self._role(sid),
             "turn": self.combat.turn_number, "legal_actions": legal}, payload))
         # Before the turn can move on: the plugin sees this player's hand,
         # HP and incoming damage as they were when they ended - the last
         # player to end included.
-        self.plugin.call("on_turn_ended", self, self.players[sid].unit_id)
+        self.plugin.call("on_turn_ended", self, ally.unit_id)
 
-        outbound = [(BROADCAST, encode(
+        outbound = [(BROADCAST, self._ready_message())]
+        outbound.extend(self._advance_if_all_ready())
+        return outbound
+
+    def _handle_wait(self, sid, payload=None):
+        """The player lets the others move first (Combat.wait): nothing in
+        the fight changes, so no state goes out - only who is waiting. Logged
+        with its decision, so a log shows when an agent chose to wait."""
+        ally = self.players[sid]
+        legal = self.combat.legal_actions(ally) if self.log.active else None
+        self.combat.wait(ally)
+        self.log.write("wait", **self._with_decision({
+            "unit_id": ally.unit_id, "role": self._role(sid),
+            "turn": self.combat.turn_number, "legal_actions": legal}, payload))
+        return [(BROADCAST, self._ready_message())]
+
+    def _ready_message(self):
+        """Who has ended, who the round still waits on, and who chose to wait."""
+        return encode(
             ServerMessage.READY_CHANGED,
             ready=sorted(self.players[s].unit_id for s in self.ready),
             waiting_on=sorted(a.unit_id for a in self._pending_allies()),
-        ))]
-        outbound.extend(self._advance_if_all_ready())
-        return outbound
+            waiting=sorted(a.unit_id for a in self.players.values()
+                           if a.unit_id in self.combat.waiting),
+        )
 
     def _advance_if_all_ready(self):
         if not self.is_running():
@@ -436,8 +461,7 @@ class Session:
         # Everyone is done and the enemies are next: the plugin's round_end.
         self.log.write("round_end", turn=self.combat.turn_number)
         self.plugin.call("on_round_end", self)
-        self.ready.clear()
-        self.combat.end_player_turn()
+        self.combat.end_player_turn()          # clears who ended and who waited
         if self.is_running():
             self.log.write("turn_start", turn=self.combat.turn_number, state=self._snapshot())
             self.plugin.call("on_turn_start", self)
@@ -450,8 +474,8 @@ class Session:
     def _pending_allies(self):
         return [
             ally
-            for sid, ally in self.players.items()
-            if ally.is_alive() and sid not in self.ready
+            for ally in self.players.values()
+            if ally.is_alive() and ally.unit_id not in self.combat.ended_turn
         ]
 
     # --- outbound helpers ----------------------------------------------
@@ -463,13 +487,9 @@ class Session:
                 players=len(self.players),
                 required=self.required_players,
             )
-        combat = self.combat.to_dict()
-        # Who has ended their turn lives here, not in Combat; each player
-        # carries it so a screen can show "(ended)".
-        ended = {self.players[s].unit_id for s in self.ready if s in self.players}
-        for ally in combat.get("allies", []):
-            ally["ended_turn"] = ally.get("unit_id") in ended
-        return encode(ServerMessage.STATE, combat=combat)
+        # Each player carries ended_turn and waiting (Combat._ally_dict), so a
+        # screen can show "(ended)".
+        return encode(ServerMessage.STATE, combat=self.combat.to_dict())
 
     def _combat_ended_messages(self):
         if self.combat is None or not self.combat.is_over():

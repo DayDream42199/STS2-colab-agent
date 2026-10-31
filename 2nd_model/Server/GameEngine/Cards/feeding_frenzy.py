@@ -12,7 +12,7 @@ class FeedingFrenzy(Card):
             name = "Feeding Frenzy",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 0,
             target_type = TargetType.SELF
         )

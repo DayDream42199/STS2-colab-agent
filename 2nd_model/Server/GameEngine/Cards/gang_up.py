@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_damage import InstantDamage
 
 
 class GangUp(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     DAMAGE = 5
     PER_ALLY = 5
 
@@ -19,7 +20,8 @@ class GangUp(Card):
         )
 
     def get_effects(self, context):
-        # Per other attacker this turn, not per hit.
+        # Per hit another player landed on it this turn, as the game counts
+        # (DamageReceivedEntry, powered attacks): a Twin Strike is two.
         attackers = context.target.turn_counters.get("attacked_by", ())
         others = sum(1 for a in attackers if a is not context.source)
         return [InstantDamage(

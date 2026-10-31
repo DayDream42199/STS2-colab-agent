@@ -10,7 +10,7 @@ class Entropy(Card):
             name = "Entropy",
             card_type = CardType.POWER,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 1,
             target_type = TargetType.SELF
         )

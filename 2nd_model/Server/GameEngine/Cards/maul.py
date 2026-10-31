@@ -7,7 +7,7 @@ from ..Effects.InstantEffects.instant_boost_card import InstantBoostCard
 class Maul(Card):
     DAMAGE = 5
     HITS = 2
-    BONUS = 2
+    BONUS = 1
 
     def __init__(self):
         super().__init__(

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Compare our Ironclad cards with the installed game's, value by value.
+"""Compare our cards with the installed game's, value by value.
 
     python tests/game_diff.py                 report every difference
+    python tests/game_diff.py Colorless       one pool only (Ironclad, Colorless,
+                                              Event, Status, Curse, Token)
     python tests/game_diff.py --json out.json also save the game's values
 
 Reads the game's decompiled C# (not in this repo - it is Mega Crit's code):
@@ -23,6 +25,10 @@ both are turned into (base, upgraded) pairs and compared. Names differ too - we
 call Juggernaut's number AMOUNT, the game JuggernautPower - so values are
 paired by name where the names agree and by elimination where one number is
 left on each side. Anything that still does not pair is listed for a person.
+
+Only what the class declares is compared. A number written straight into
+OnPlay (Calamity's 1 CalamityPower) or a rule in its code is not - that needs
+reading the card.
 """
 import json
 import os
@@ -35,15 +41,46 @@ sys.path.insert(0, os.path.join(HERE, "..", "Server"))
 from GameEngine.Registry.card_registry import create_card, known_card_ids
 from GameEngine.Cards._card import Card
 from GameEngine.Cards._card_ref import CardRef
-from GameEngine.Cards._card_enums import CardClass
+from GameEngine.Cards._upgrades import upgrade_for
+from GameEngine.Registry.coverage import EXCLUDED, DEFERRED
 
 SOURCE = os.environ.get("STS2_SOURCE", r"D:\sts2_source")
 CARDS_DIR = os.path.join(SOURCE, "MegaCrit.Sts2.Core.Models.Cards")
-POOL = os.path.join(SOURCE, "MegaCrit.Sts2.Core.Models.CardPools", "IroncladCardPool.cs")
+POOLS_DIR = os.path.join(SOURCE, "MegaCrit.Sts2.Core.Models.CardPools")
+# The pools a card in this game can come from. The other characters' pools
+# are not ported (Registry/coverage.py).
+POOLS = ("Ironclad", "Colorless", "Event", "Status", "Curse", "Token")
 
 # The game's class name -> our card id, where snake_case does not get there.
 ID_OVERRIDES = {"DefendIronclad": "defend", "StrikeIronclad": "strike", "FightMe": "fight_me",
                 "ExpectAFight": "expect_a_fight"}
+
+# Game classes ported as more than one card, so they are read by hand: the
+# game's one MadScience card is set up by an event into one of nine variants,
+# ours are eight cards (Cards/mad_science.py).
+BY_HAND = {"MadScience": "mad_science_*, one card per variant"}
+
+# Rarities we have no member for: these cards are never drafted, so ours
+# carry a placeholder and the game's is not compared.
+UNPOOLED = {"Status", "Curse", "Token", "Quest"}
+
+# Where the names say nothing: the game var -> our constant, per card.
+PAIRS = {"stack": {"CalculationBase": "BONUS"}}
+
+# Differences that are ours on purpose, listed but not counted.
+ON_PURPOSE = {
+    "void": "ours stores the Energy lost as -1, the game as 1 with LoseEnergy",
+    # The Knowledge Demon (Hive, Act 2) offers these as choices that apply a
+    # power at once; ours are cards held in the deck that charge every turn.
+    "disintegration": "Act 2 Knowledge Demon choice, ported as an unplayable card",
+    "mind_rot": "Act 2 Knowledge Demon choice, ported as an unplayable card",
+    "sloth": "Act 2 Knowledge Demon choice, ported as an unplayable card",
+    "waste_away": "Act 2 Knowledge Demon choice, ported as an unplayable card",
+}
+
+# Keywords that do nothing in a fight. Eternal only keeps a card in the deck
+# (CardModel.IsRemovable); in combat it can still be Transformed.
+DECK_ONLY_KEYWORDS = {"Eternal"}
 
 # DynamicVarSet's shorthand properties -> the key the var is stored under.
 PROPERTY_KEYS = {"Vulnerable": "VulnerablePower", "Weak": "WeakPower",
@@ -110,7 +147,8 @@ def parse_game_card(cls):
         cost = "X"
     card = {"class": cls, "cost": cost, "type": ctor.group(2), "rarity": ctor.group(3),
             "target": ctor.group(4), "vars": {}, "keywords": [], "upgrade": {},
-            "upgrade_cost": 0, "upgrade_keywords": {}, "upgrade_other": []}
+            "upgrade_cost": 0, "upgrade_keywords": {}, "upgrade_other": [],
+            "upgradable": "MaxUpgradeLevel => 0" not in text}
 
     for kind, generic, named, value in VAR.findall(expression_after(text, "CanonicalVars")):
         key = named or generic or kind
@@ -138,9 +176,14 @@ def parse_game_card(cls):
     return card
 
 
-def game_pool():
-    text = open(POOL, encoding="utf-8").read()
+def game_pool(name):
+    text = open(os.path.join(POOLS_DIR, name + "CardPool.cs"), encoding="utf-8").read()
     return re.findall(r"ModelDb\.Card<(\w+)>\(\)", block_after(text, "GenerateAllCards()"))
+
+
+def spaced(cls):
+    """MinionDiveBomb -> Minion Dive Bomb, as coverage.py names cards."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", cls)
 
 
 # --- our side ----------------------------------------------------------------
@@ -180,21 +223,29 @@ def compare(game, card_id):
     ours, cost, up_cost, kws, up_kws = our_values(card_id)
 
     card = create_card(card_id)
-    for field, mine, theirs in (
-            ("type", card.card_type.name, game["type"].upper()),
-            ("rarity", card.rarity.name, game["rarity"].upper()),
-            ("target", card.target_type.name, TARGETS.get(game["target"], game["target"]))):
+    fields = [("type", card.card_type.name, game["type"].upper()),
+              ("target", card.target_type.name, TARGETS.get(game["target"], game["target"]))]
+    if game["rarity"] not in UNPOOLED:
+        fields.append(("rarity", card.rarity.name, game["rarity"].upper()))
+    for field, mine, theirs in fields:
         if mine != theirs:
             diffs.append("%s %s -> %s" % (field, mine, theirs))
 
+    # -1 is the game's cost for a card that cannot be played; ours keeps a
+    # number there and says so with playable=False (compared as a keyword).
     g_cost = game["cost"]
-    g_up_cost = g_cost if g_cost == "X" else g_cost + game["upgrade_cost"]
-    if cost != g_cost:
-        diffs.append("cost %s -> %s" % (cost, g_cost))
-    if up_cost != g_up_cost:
-        diffs.append("upgraded cost %s -> %s" % (up_cost, g_up_cost))
+    if g_cost != -1:
+        g_up_cost = g_cost if g_cost == "X" else g_cost + game["upgrade_cost"]
+        if cost != g_cost:
+            diffs.append("cost %s -> %s" % (cost, g_cost))
+        if up_cost != g_up_cost:
+            diffs.append("upgraded cost %s -> %s" % (up_cost, g_up_cost))
 
-    g_kw = sorted(KEYWORDS.get(k, k.lower()) for k in game["keywords"])
+    if not game["upgradable"] and (card.UPGRADE or upgrade_for(card_id)):
+        diffs.append("has an upgrade; the game's cannot be upgraded")
+
+    g_kw = sorted(KEYWORDS.get(k, k.lower()) for k in game["keywords"]
+                  if k not in DECK_ONLY_KEYWORDS)
     g_up_kw = set(g_kw)
     for k, on in game["upgrade_keywords"].items():
         (g_up_kw.add if on else g_up_kw.discard)(KEYWORDS.get(k, k.lower()))
@@ -207,7 +258,9 @@ def compare(game, card_id):
     left_ours = dict(ours)
     left_game = {}
     for key, pair in g_vals.items():
-        hit = next((n for n in game_name_to_ours(key, game["class"]) if n in left_ours), None)
+        named = PAIRS.get(card_id, {}).get(key)
+        hit = next((n for n in ([named] if named else game_name_to_ours(key, game["class"]))
+                    if n in left_ours), None)
         if hit is None:
             left_game[key] = pair
             continue
@@ -236,50 +289,74 @@ def main(argv):
     if not os.path.isdir(CARDS_DIR):
         print("no decompiled source at %s - see the docstring" % SOURCE)
         return 2
-    pool = game_pool()
+    pools = [p for p in POOLS if p in argv] or list(POOLS)
     ours_ids = set(known_card_ids())
-    our_ironclad = {i for i in ours_ids if create_card(i).card_class is CardClass.IRONCLAD}
+    # ours that no game pool claims; only meaningful when every pool is read
+    unclaimed = set(ours_ids)
 
-    games, changed, clean, missing, notes = {}, {}, [], [], {}
-    for cls in pool:
-        game = parse_game_card(cls)
-        games[cls] = game
-        card_id = ID_OVERRIDES.get(cls, snake(cls))
-        if card_id not in ours_ids:
-            missing.append((cls, card_id))
-            continue
-        our_ironclad.discard(card_id)
-        diffs, loose = compare(game, card_id)
-        if diffs:
-            changed[card_id] = diffs
-        else:
-            clean.append(card_id)
-        if loose:
-            notes[card_id] = loose
+    games, totals = {}, {"match": 0, "kept": 0, "differ": 0, "missing": 0,
+                       "skipped": 0}
+    print("game v%s" % game_version())
+    for name in pools:
+        changed, clean, missing, skipped, notes, kept = {}, [], [], [], {}, {}
+        pool = game_pool(name)
+        for cls in pool:
+            game = parse_game_card(cls)
+            games[cls] = game
+            card_id = ID_OVERRIDES.get(cls, snake(cls))
+            reason = BY_HAND.get(cls) or EXCLUDED.get(spaced(cls)) or DEFERRED.get(spaced(cls))
+            if reason:
+                skipped.append((cls, reason))
+                unclaimed -= {i for i in unclaimed if i.startswith(card_id)}
+                continue
+            if card_id not in ours_ids:
+                missing.append((cls, card_id))
+                continue
+            unclaimed.discard(card_id)
+            diffs, loose = compare(game, card_id)
+            if diffs and card_id in ON_PURPOSE:
+                kept[card_id] = ON_PURPOSE[card_id]
+            elif diffs:
+                changed[card_id] = diffs
+            else:
+                clean.append(card_id)
+            if loose:
+                notes[card_id] = loose
 
-    print("game v%s Ironclad pool: %d cards" % (game_version(), len(pool)))
+        print()
+        print("######## %s pool: %d cards ########" % (name, len(pool)))
+        print("== %d cards differ from the game ==" % len(changed))
+        for card_id, diffs in sorted(changed.items()):
+            print("  %-18s %s" % (card_id, diffs[0]))
+            for d in diffs[1:]:
+                print("  %-18s %s" % ("", d))
+        if kept:
+            print("== differ on purpose (%d) ==" % len(kept))
+            for card_id, why in sorted(kept.items()):
+                print("  %-18s %s" % (card_id, why))
+        print("== in the game's pool, not in ours (%d) ==" % len(missing))
+        for cls, card_id in missing:
+            print("  %s (would be %s)" % (cls, card_id))
+        print("== left out on purpose (%d) ==" % len(skipped))
+        for cls, reason in skipped:
+            print("  %-18s %s" % (cls, reason))
+        print("== could not pair automatically - read these (%d cards) ==" % len(notes))
+        for card_id, loose in sorted(notes.items()):
+            for line in loose:
+                print("  %-18s %s" % (card_id, line))
+        print("match exactly: %d   on purpose: %d   differ: %d   missing: %d   left out: %d"
+              % (len(clean), len(kept), len(changed), len(missing), len(skipped)))
+        for key, n in (("match", clean), ("kept", kept), ("differ", changed),
+                       ("missing", missing), ("skipped", skipped)):
+            totals[key] += len(n)
+
     print()
-    print("== %d cards differ from the game ==" % len(changed))
-    for card_id, diffs in sorted(changed.items()):
-        print("  %-18s %s" % (card_id, diffs[0]))
-        for d in diffs[1:]:
-            print("  %-18s %s" % ("", d))
-    print()
-    print("== in the game's Ironclad pool, not in ours (%d) ==" % len(missing))
-    for cls, card_id in missing:
-        print("  %s (would be %s)" % (cls, card_id))
-    print()
-    print("== Ironclad in ours, not in the game (%d) ==" % len(our_ironclad))
-    for card_id in sorted(our_ironclad):
-        print("  " + card_id)
-    print()
-    print("== could not pair automatically - read these (%d cards) ==" % len(notes))
-    for card_id, loose in sorted(notes.items()):
-        for line in loose:
-            print("  %-18s %s" % (card_id, line))
-    print()
-    print("match exactly: %d   differ: %d   missing: %d   extra: %d"
-          % (len(clean), len(changed), len(missing), len(our_ironclad)))
+    if len(pools) == len(POOLS):
+        print("== ours, in none of the game's pools (%d) ==" % len(unclaimed))
+        for card_id in sorted(unclaimed):
+            print("  " + card_id)
+    print("all pools read: match exactly: %(match)d   on purpose: %(kept)d   differ: %(differ)d   "
+          "missing: %(missing)d   left out: %(skipped)d" % totals)
 
     if "--json" in argv:
         out = argv[argv.index("--json") + 1]

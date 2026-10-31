@@ -15,6 +15,12 @@ A descriptor: id, upgraded, type, cost, target, keywords, damage, hits, block,
 statuses (what it applies, by scope: self / target / all_allies /
 all_enemies), groups (now / scale / team / self) - see card_groups.py.
 
+**Actions.** With every state, and every `ready_changed` (a teammate ending
+or waiting changes what is open without a new state), the agent gets its own
+`action_mask` - 113 numbers, 1 where that action is open now - and
+`action_targets`, the unit in each of the 10 target slots. The menu:
+action_space.py.
+
 **Profiles.** Every player who is not the agent is profiled on Aggression,
 Scaling and Teamwork (analyzer.py has the arithmetic). Each turn's history is
 gathered here: the energy they had, every card that was in their hand and the
@@ -33,7 +39,7 @@ for them. Profiles last the fight: the server plays one per session.
 Every other client gets the player format, untouched. Game units only: the
 agent normalizes.
 """
-from . import analyzer
+from . import action_space, analyzer
 from .card_groups import card_info, describe_card, describe_hand
 
 AGENT = "agent"
@@ -80,9 +86,21 @@ class Aura:
             payload["profiles"] = {unit_id: analyzer.values(profile)
                                    for unit_id, profile in self.profiles.items()
                                    if unit_id != _unit_of(session, recipient)}
+            self._add_menu(session, recipient, payload)
+        elif kind == "ready_changed":
+            self._add_menu(session, recipient, payload)
         elif kind == "choice_required":
             self._add_options(session.combat, payload)
         return message
+
+    @staticmethod
+    def _add_menu(session, recipient, payload):
+        ally = session.players.get(recipient)
+        if ally is None:
+            return
+        slots = action_space.targets(session.combat, ally)
+        payload["action_targets"] = slots
+        payload["action_mask"] = action_space.mask(session.combat, ally, slots)
 
     @staticmethod
     def _add_cards(combat, state):

@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 
 class Lift(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     BLOCK = 11
 
     def __init__(self):

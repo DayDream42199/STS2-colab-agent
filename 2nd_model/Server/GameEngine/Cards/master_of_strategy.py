@@ -13,7 +13,7 @@ class MasterOfStrategy(Card):
             name = "Master of Strategy",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 0,
             target_type = TargetType.SELF,
             properties = CardProperties(exhaust=True)

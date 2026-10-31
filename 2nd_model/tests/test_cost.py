@@ -140,35 +140,57 @@ check("Corruption is permanent", a[0].get_status("corruption") is not None)
 c.end_player_turn()
 check("Corruption survives the turn", a[0].get_status("corruption") is not None)
 
-# --- Enlightenment: everything costs at most 1 ------------------------------
+# --- Enlightenment: the cards in hand cost at most 1 ------------------------
+# As the game's Enlightenment: each copy in hand when it is played, this turn
+# or until that copy is played; upgraded, for the rest of the combat. A card
+# drawn afterwards is not touched.
+from GameEngine.Cards._card_ref import CardRef
+
+def cost_of(c, ally, ref):
+    return c.card_cost(ally, create_card(ref))
+
 c, a, es = fight(seed=6)
 a[0].energy = 9
-check("Bludgeon normally costs 3",
-      c.card_cost(a[0], create_card("bludgeon")) == 3,
-      c.card_cost(a[0], create_card("bludgeon")))
-play(c, a[0], "enlightenment")
-check("Enlightenment caps Bludgeon at 1",
-      c.card_cost(a[0], create_card("bludgeon")) == 1,
-      c.card_cost(a[0], create_card("bludgeon")))
-check("it does not raise a card that already costs 0",
-      c.card_cost(a[0], create_card("anger")) == 0,
-      c.card_cost(a[0], create_card("anger")))
+held = [CardRef("bludgeon"), CardRef("anger"), CardRef("bludgeon")]
+later = CardRef("bludgeon")
+check("Bludgeon normally costs 3", cost_of(c, a[0], held[0]) == 3, cost_of(c, a[0], held[0]))
+a[0].hand = [CardRef("enlightenment")] + held
+c.play_card(a[0], 0)
+check("Enlightenment caps a Bludgeon in hand at 1", cost_of(c, a[0], held[0]) == 1,
+      cost_of(c, a[0], held[0]))
+check("it does not raise a card that already costs 0", cost_of(c, a[0], held[1]) == 0,
+      cost_of(c, a[0], held[1]))
+check("a Bludgeon that was not in hand still costs 3", cost_of(c, a[0], later) == 3,
+      cost_of(c, a[0], later))
 check("Enlightenment exhausts itself", a[0].exhaust_pile == ["enlightenment"],
       a[0].exhaust_pile)
+energy = a[0].energy
+c.play_card(a[0], 0, target=es[0])
+check("the capped Bludgeon is played for 1", a[0].energy == energy - 1, a[0].energy)
+check("played, its cap is gone (until played)", cost_of(c, a[0], held[0]) == 3,
+      cost_of(c, a[0], held[0]))
+check("the other copy keeps its cap this turn", cost_of(c, a[0], held[2]) == 1,
+      cost_of(c, a[0], held[2]))
 c.end_player_turn()
-check("the cap is gone next turn",
-      c.card_cost(a[0], create_card("bludgeon")) == 3,
-      c.card_cost(a[0], create_card("bludgeon")))
-check("the status itself expired",
-      a[0].get_status("enlightenment") is None, a[0].statuses)
+check("the cap is gone next turn", cost_of(c, a[0], held[2]) == 3, cost_of(c, a[0], held[2]))
+
+c, a, es = fight(seed=6)
+a[0].energy = 9
+held = [CardRef("bludgeon")]
+a[0].hand = [CardRef("enlightenment", upgraded=True)] + held
+c.play_card(a[0], 0)
+c.end_player_turn()
+check("Enlightenment+ caps it for the rest of the combat", cost_of(c, a[0], held[0]) == 1,
+      cost_of(c, a[0], held[0]))
 
 c, a, es = fight(seed=6)
 a[0].energy = 9
 play(c, a[0], "corruption")
-play(c, a[0], "enlightenment")
-check("Corruption's 0 for Skills survives Enlightenment's cap",
-      c.card_cost(a[0], create_card("defend")) == 0,
-      c.card_cost(a[0], create_card("defend")))
+held = [CardRef("defend")]
+a[0].hand = [CardRef("enlightenment")] + held
+c.play_card(a[0], 0)
+check("Corruption's 0 for Skills survives Enlightenment's cap", cost_of(c, a[0], held[0]) == 0,
+      cost_of(c, a[0], held[0]))
 
 # --- X-cost -----------------------------------------------------------------
 c, a, es = fight(n_enemies=2, seed=7)
@@ -227,13 +249,13 @@ check("Havoc playing Whirlwind deals nothing - nobody paid for it",
 check("but it was still played and exhausted",
       a[0].exhaust_pile == ["whirlwind"], a[0].exhaust_pile)
 
-# --- the free-play tally still wins over a dynamic cost ---------------------
+# --- a free copy plays at 0 ---------------------------------------------------
+from GameEngine.Cards._card_ref import free_copy
 c, a, es = fight(seed=11)
 a[0].energy = 0
-a[0].free_this_turn = ["bludgeon"]
-a[0].hand = ["bludgeon"]
+a[0].hand = [free_copy("bludgeon")]
 c.play_card(a[0], 0, target=es[0])
-check("a free grant beats a 3-cost card at 0 energy", es[0].current_hp == 368,
+check("a free copy of a 3-cost card plays at 0 energy", es[0].current_hp == 368,
       es[0].current_hp)
 
 # --- hand_cost: what each card in hand costs, sent with the state -----------
@@ -263,8 +285,11 @@ check("Tangled adds 1 to Attacks only",
       wire_costs(c, a[0])[:2] == [2, 3] and wire_costs(c, a[0])[3] is None,
       wire_costs(c, a[0]))
 
-a[0].free_this_turn = ["bash"]
-check("a free grant shows 0", wire_costs(c, a[0])[1] == 0, wire_costs(c, a[0]))
+a[0].hand[1] = free_copy("bash")
+check("a free copy under Tangled shows 1: Tangled comes after the copy's own 0",
+      wire_costs(c, a[0])[1] == 1, wire_costs(c, a[0]))
+a[0].remove_status("tangled")
+check("and 0 without it", wire_costs(c, a[0])[1] == 0, wire_costs(c, a[0]))
 
 c, a, es = fight(seed=13)
 a[0].energy = 9

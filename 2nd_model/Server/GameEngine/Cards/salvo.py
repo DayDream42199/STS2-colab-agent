@@ -12,7 +12,7 @@ class Salvo(Card):
             name = "Salvo",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 1,
             target_type = TargetType.ENEMY
         )

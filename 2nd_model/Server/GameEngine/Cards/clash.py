@@ -12,7 +12,7 @@ class Clash(Card):
             name = "Clash",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 0,
             target_type = TargetType.ENEMY
         )

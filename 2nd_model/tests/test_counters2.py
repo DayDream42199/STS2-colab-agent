@@ -63,8 +63,8 @@ for _ in range(3):
     play(c, a[1], "defend")
 hp = es[0].current_hp
 play(c, a[0], "gold_axe", es[0])
-check("Gold Axe counts only its own player's cards", es[0].current_hp == hp,
-      es[0].current_hp)
+check("Gold Axe counts every player's cards (the game's CardPlaysFinished)",
+      es[0].current_hp == hp - 3, es[0].current_hp)
 
 # --- Tear Asunder: one extra hit per HP-loss event --------------------------
 c, a, es = fight(seed=3)
@@ -134,8 +134,8 @@ for _ in range(3):
     play(c, a[1], "strike", es[0])
 hp = es[0].current_hp
 play(c, a[0], "gang_up", es[0])
-check("the same attacker three times still counts once",
-      es[0].current_hp == hp - 10, es[0].current_hp)
+check("the same attacker three times counts three times: every hit counts",
+      es[0].current_hp == hp - 20, es[0].current_hp)
 
 c, a, es = fight(n_allies=3, seed=4)
 play(c, a[0], "strike", es[0])

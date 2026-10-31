@@ -24,12 +24,15 @@ class JackOfAllTrades(Card):
         # this card, so importing it back at import time would deadlock.
         from ..Registry.card_registry import generatable_card_ids
 
-        pool = generatable_card_ids(card_class=CardClass.COLORLESS)
-        if not pool:
-            return []
+        # Different cards, never itself (the game's GetDistinctForCombat over
+        # the colorless pool, less Jack of All Trades).
+        pool = [card_id for card_id in generatable_card_ids(
+                    card_class=CardClass.COLORLESS, solo=context.solo)
+                if card_id != self.card_id]
+        picked = context.rngs.card_generation.sample(pool, min(self.COUNT, len(pool)))
         return [
             InstantAddCard(
                 source=context.source, target=context.source,
-                card_id=context.rngs.card_generation.choice(pool), pile=InstantAddCard.HAND)
-            for _ in range(self.COUNT)
+                card_id=card_id, pile=InstantAddCard.HAND)
+            for card_id in picked
         ]

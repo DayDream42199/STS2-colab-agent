@@ -72,7 +72,7 @@ p = analyzer.new_profile()
 analyzer.update(p, {"A": {"e": 1.0, "w": 2 / 3}, "S": {"e": 0.0, "w": 0.0}, "T": {"e": -0.5, "w": 1.0}})
 check("first turn: n = w, so X jumps to e", near(p["A"]["X"], 1) and near(p["T"]["X"], -0.5), p)
 check("d takes the surprise, c = (n / beta)(1 - |d| / 2)",
-      near(p["A"]["d"], 1) and near(p["A"]["c"], (2 / 3) / 8 * 0.5), p["A"])
+      near(p["A"]["d"], 1) and near(p["A"]["c"], (2 / 3) / analyzer.BETA * 0.5), p["A"])
 check("weight 0: untouched", p["S"] == {"X": 0.0, "d": 0.0, "c": 0.0}, p["S"])
 
 p = analyzer.new_profile()
@@ -191,7 +191,7 @@ class Probe(Ally):
     DEFAULT_MAX_HP = 60
     DEFAULT_DECK = []
 register_ally(Probe)
-ids, seen, out_of_range, errors = list(known_card_ids()), 0, [], 0
+ids, seen, out_of_range, errors, logs = list(known_card_ids()), 0, [], 0, []
 for seed in range(15):
     rng = random.Random(seed)
     Probe.DEFAULT_DECK = [CardRef(rng.choice(ids), upgraded=rng.random() < 0.3) for _ in range(14)]
@@ -217,7 +217,8 @@ for seed in range(15):
         plays = [a for a in acts if a["type"] != "end_turn"]
         a = rng.choice(plays) if plays and rng.random() < 0.8 else rng.choice(acts)
         s.handle(sid, encode(ClientMessage(a["type"]), **{k: v for k, v in a.items() if k != "type"}))
-    for line in read(os.path.join(folder, os.listdir(folder)[0])):
+    logs.append(os.path.join(folder, os.listdir(folder)[0]))
+    for line in read(logs[-1]):
         errors += line["event"] == "error"
         if line["event"] != "profile_update":
             continue
@@ -229,6 +230,35 @@ for seed in range(15):
 check("random decks, questions, deaths, a player leaving: no errors, plenty of updates",
       errors == 0 and seen > 30, (errors, seen))
 check("every e in [-1, 1], w in [0, 1], X in [-1, 1], c in [0, 1]", not out_of_range, out_of_range[:1])
+
+# The teammate's package (2nd_model/CharacteristicAnalyzer), fed the same turns from the logs.
+from Plugins import ca_feed
+if os.path.isdir(ca_feed.PACKAGE):
+    gaps, turns = [], 0
+    for log in logs:
+        found, _ = ca_feed.feed(log, tempfile.mkdtemp())
+        for rows in found.values():
+            turns += len(rows)
+            gaps += [abs(theirs[k] - ours[k]) for _, theirs, ours, _ in rows for k in ca_feed.KEYS]
+    check("CharacteristicAnalyzer gives our numbers at its own beta, turn for turn",
+          turns > 30 and max(gaps) < 1e-9, (turns, max(gaps)))
+
+    # Its charts: the page carries every player's turns and says they agree.
+    from Plugins import ca_plot
+    found, beta = ca_feed.feed(logs[0], tempfile.mkdtemp())
+    data = ca_plot.chart_data(found, beta)
+    page = os.path.join(tempfile.mkdtemp(), "ca.html")
+    ca_plot.write_html(data, "test </script>", page)
+    text = open(page, encoding="utf-8").read()
+    check("ca_plot draws every player's turns, with all six numbers each",
+          [p["id"] for p in data["players"]] == list(found)
+          and all(len(p["turns"]) == len(found[p["id"]]) and set(ca_feed.KEYS) <= set(p["turns"][0])
+                  for p in data["players"]), [p["id"] for p in data["players"]])
+    check("and the page holds that data and says the two analyzers agree",
+          data["agree"] and json.dumps(data["players"][0]["turns"][0]) in text
+          and "test &lt;/script&gt;" in text, data["gap"])
+else:
+    print("[SKIP] CharacteristicAnalyzer is not here: nothing to compare with")
 
 print()
 print("%d checks failed" % len(bad))

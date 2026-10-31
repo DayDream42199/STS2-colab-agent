@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_energy import InstantEnergy
 
 
 class BelieveInYou(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     ENERGY = 2
 
     def __init__(self):

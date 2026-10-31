@@ -4,7 +4,7 @@ from ..Effects.InstantEffects.instant_damage import InstantDamage
 
 
 class Rend(Card):
-    DAMAGE = 10
+    DAMAGE = 15
     PER_DEBUFF = 5
 
     def __init__(self):
@@ -13,8 +13,8 @@ class Rend(Card):
             name = "Rend",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
-            cost = 1,
+            rarity = CardRarity.RARE,
+            cost = 2,
             target_type = TargetType.ENEMY
         )
 

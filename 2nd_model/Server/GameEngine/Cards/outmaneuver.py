@@ -4,7 +4,7 @@ from ..Effects.StatusEffects.delayed_energy import DelayedEnergy
 
 
 class Outmaneuver(Card):
-    TURNS = 1
+    ENERGY = 2
 
     def __init__(self):
         super().__init__(
@@ -12,11 +12,11 @@ class Outmaneuver(Card):
             name = "Outmaneuver",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.EVENT,
             cost = 1,
             target_type = TargetType.SELF
         )
 
     def get_effects(self, context):
         return [DelayedEnergy(
-            source=context.source, target=context.source, amount=self.TURNS)]
+            source=context.source, target=context.source, amount=self.ENERGY)]

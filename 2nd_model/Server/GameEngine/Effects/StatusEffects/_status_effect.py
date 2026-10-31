@@ -26,6 +26,12 @@ class StatusEffect(Effect):
     # 1), read by Combat._play_cap beside the hand's Normality and Sloth.
     PLAY_CAP = None
 
+    def forbids_play(self, card):
+        """Whether its holder may not play `card` right now (Smoggy: a second
+        Skill in a turn). Asked of manual and automatic plays alike, as the
+        game's ShouldPlay is."""
+        return False
+
     def modify_incoming_damage(self, amount, attacker=None):
         # `attacker` is who is hitting (Colossus), None when unattributed.
         return amount

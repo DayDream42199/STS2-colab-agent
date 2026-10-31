@@ -164,25 +164,25 @@ check("and Pillage's damage still lands", es[0].current_hp == 194, es[0].current
 # --- Rend ------------------------------------------------------------------
 c, a, es = fight(seed=7)
 play(c, a[0], "rend", es[0])
-check("Rend with no debuffs deals 10", es[0].current_hp == 190, es[0].current_hp)
+check("Rend with no debuffs deals 15", es[0].current_hp == 185, es[0].current_hp)
 
 c, a, es = fight(seed=7)
 es[0].apply_status(Vulnerable(source=a[0], target=es[0], amount=3))
 play(c, a[0], "rend", es[0])
-check("Rend counts a debuff once regardless of stacks: (10+5)*1.5",
-      es[0].current_hp == 178, es[0].current_hp)
+check("Rend counts a debuff once regardless of stacks: (15+5)*1.5",
+      es[0].current_hp == 170, es[0].current_hp)
 
 c, a, es = fight(seed=7)
 es[0].apply_status(Weak(source=a[0], target=es[0], amount=1))
 es[0].apply_status(Frail(source=a[0], target=es[0], amount=1))
 play(c, a[0], "rend", es[0])
-check("Rend counts 2 distinct debuffs: 10 + 10", es[0].current_hp == 180,
+check("Rend counts 2 distinct debuffs: 15 + 10", es[0].current_hp == 175,
       es[0].current_hp)
 
 c, a, es = fight(seed=7)
 es[0].apply_status(Strength(source=es[0], target=es[0], amount=5))
 play(c, a[0], "rend", es[0])
-check("Rend does not count buffs as debuffs", es[0].current_hp == 190,
+check("Rend does not count buffs as debuffs", es[0].current_hp == 185,
       es[0].current_hp)
 
 # --- Scrawl ----------------------------------------------------------------

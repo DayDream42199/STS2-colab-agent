@@ -13,7 +13,7 @@ class TheGambit(Card):
             name = "The Gambit",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 0,
             target_type = TargetType.SELF
         )

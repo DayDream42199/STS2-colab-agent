@@ -23,7 +23,7 @@ class Stoke(Card):
         from ..Registry.card_registry import generatable_card_ids
         # Stoke has already left the hand, so "your Hand" is what remains.
         hand = list(context.source.hand)
-        pool = generatable_card_ids(card_class=CardClass.IRONCLAD)
+        pool = generatable_card_ids(card_class=CardClass.IRONCLAD, solo=context.solo)
         if not hand or not pool:
             return []
         effects = [InstantExhaust(

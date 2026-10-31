@@ -15,7 +15,7 @@ from GameEngine.Context.context import PendingChoice
 from GameEngine.Registry.card_registry import create_card, known_card_ids
 from GameEngine.Registry.unit_registry import create_ally, create_enemy, register_ally
 from GameEngine.Cards._card_enums import TargetType
-from GameEngine.Cards._card_ref import CardRef
+from GameEngine.Cards._card_ref import CardRef, free_copy
 from GameEngine.Units.Allies._ally import Ally
 
 bad = []
@@ -63,7 +63,7 @@ check("1 energy: Bash (2) is not on the list", plays(c.legal_actions(p)) == [(0,
       plays(c.legal_actions(p)))
 p.energy = 0
 check("no energy: only end turn", c.legal_actions(p) == [{"type": "end_turn"}], c.legal_actions(p))
-p.free_this_turn.append("bash")
+p.hand[2] = free_copy(p.hand[2])
 check("a free Bash is playable at 0 energy", plays(c.legal_actions(p)) == [(2, "e1")],
       plays(c.legal_actions(p)))
 
@@ -80,7 +80,7 @@ p.hand, p.energy = [CardRef("strike"), CardRef("enthralled"), CardRef("enthralle
 listed = plays(c.legal_actions(p))
 check("Enthralled held: it is the only play, and only its first copy", listed == [(1, "")], listed)
 p.hand = [CardRef("strike"), CardRef("strike"), CardRef("normality")]
-p.turn_counters["cards_played"] = 3
+p.turn_counters["cards_played"] = p.turn_counters["cards_started"] = 3
 check("Normality after 3 plays: no play is open, end turn still is",
       c.legal_actions(p) == [{"type": "end_turn"}], c.legal_actions(p))
 
@@ -159,9 +159,9 @@ def as_message(action):
 def candidates(s, ally):
     """Every action worth trying: each hand index around the hand, at every
     unit (living or not), at nobody and at someone unknown; each answer
-    around the options, and stopping; ending the turn."""
+    around the options, and stopping; ending the turn; waiting."""
     ids = [u.unit_id for u in s.combat.allies + s.combat.enemies] + [None, FAKE]
-    out = [{"type": "end_turn"}]
+    out = [{"type": "end_turn"}, {"type": "wait"}]
     for index in range(-1, len(ally.hand) + 1):
         out.extend({"type": "play_card", "hand_index": index, "target_id": t} for t in ids)
     ask = s.combat.choice_for(ally)
@@ -197,7 +197,7 @@ def trial_copy(s):
             r.setstate(state)
     return trial, restore
 mismatches, decisions, tried, fights = [], 0, 0, 0
-seen = {"question": 0, "stop": 0, "teammate": 0, "random": 0}
+seen = {"question": 0, "stop": 0, "teammate": 0, "random": 0, "wait": 0}
 lineups = [("nibbit",), ("leafslimemedium", "twigslimesmall"), ("flyconid", "nibbit", "wriggler"),
            ("dummy1", "dummy1")]
 for seed in range(40):
@@ -234,6 +234,7 @@ for seed in range(40):
         seen["random"] += any(a["type"] == "play_card" and create_card(ally.hand[a["hand_index"]])
                               .target_type in (TargetType.RANDOM_ENEMY, TargetType.RANDOM_ALLY)
                               for a in listed)
+        seen["wait"] += {"type": "wait"} in listed
         for action in candidates(s, ally):
             trial, restore = trial_copy(s)
             answer = refused(trial.handle(sid, as_message(action)), sid)
@@ -265,7 +266,7 @@ print("%d fights, %d decision points, %d actions tried; decisions with %s" % (
 check("every listed action accepted, every other refused", not mismatches, mismatches[:5])
 check("the fights reached plenty of decisions, questions and teammate targets among them",
       decisions > 500 and seen["question"] > 10 and seen["stop"] and seen["teammate"] > 10
-      and seen["random"], (decisions, seen))
+      and seen["random"] and seen["wait"] > 10, (decisions, seen))
 
 print()
 print("%d checks failed" % len(bad))

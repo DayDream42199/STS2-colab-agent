@@ -19,15 +19,17 @@ class SwordBoomerang(Card):
 
     def get_effects(self, context):
         # Re-rolled per hit rather than using context.target, so the three
-        # hits can land on different enemies.
-        effects = []
-        for _ in range(self.HITS):
+        # hits can land on different enemies. One at a time: each hit picks
+        # from the enemies still standing once the last one has landed, as
+        # the game's AttackCommand does, so none is spent on a corpse.
+        for hit in range(self.HITS):
             alive = [e for e in context.all_enemies if e.is_alive()]
             if not alive:
-                break
-            effects.append(InstantDamage(
+                return
+            effect = InstantDamage(
                 source=context.source,
                 target=context.rngs.targets.choice(alive),
                 amount=self.DAMAGE,
-            ))
-        return effects
+            )
+            effect.hit = hit           # its own hit, whoever it lands on (Combat._Hits)
+            yield effect

@@ -4,9 +4,8 @@ from ..InstantEffects.instant_energy import InstantEnergy
 
 
 class DelayedEnergy(StatusEffect):
-    """Grant Energy at the start of each of the next `amount` turns."""
-
-    ENERGY = 2
+    """Gain `amount` Energy at the start of your next turn - the game's
+    EnergyNextTurnPower. Two of them add up into one bigger payout."""
 
     def __init__(self, source, target, amount):
         super().__init__("delayed_energy")
@@ -15,13 +14,13 @@ class DelayedEnergy(StatusEffect):
         self.amount = amount
 
     def on_owner_turn_end(self):
-        pass
+        pass  # amount is Energy, not a duration
 
     def on_event(self, event, context):
         if event is not GameEvent.TURN_START:
             return None
         if context.target is not context.source or self.amount <= 0:
             return None
-        self.amount -= 1
+        energy, self.amount = self.amount, 0   # spent; the next tick removes it
         return [InstantEnergy(
-            source=context.source, target=context.source, amount=self.ENERGY)]
+            source=context.source, target=context.source, amount=energy)]

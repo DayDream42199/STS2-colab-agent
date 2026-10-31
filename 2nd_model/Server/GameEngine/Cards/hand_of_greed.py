@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_damage import InstantDamage
 
 
 class HandOfGreed(Card):
+    GENERATED_IN_COMBAT = False     # never made at random (CanBeGeneratedInCombat)
     DAMAGE = 20
 
     def __init__(self):
@@ -12,7 +13,7 @@ class HandOfGreed(Card):
             name = "Hand of Greed",
             card_type = CardType.ATTACK,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 2,
             target_type = TargetType.ENEMY
         )

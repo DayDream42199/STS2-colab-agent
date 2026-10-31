@@ -26,18 +26,12 @@ class Ally(Unit, ABC):
         self.exhaust_pile = []
         # Set by cards like Equilibrium; cleared every turn by Combat.
         self.retain_hand = False
-        # Ids that cost 0 for their next play. A tally rather than a flag on
-        # the card, because piles hold id strings: with two Strikes held and
-        # one made free, either may be the free one.
-        self.free_this_turn = []
-        self.free_this_combat = []
         # Reshuffles this draw did. An Ally has no Combat to emit with, so it
         # counts them and Combat announces them (Stratagem).
         self.shuffles_pending = 0
 
     def start_turn(self):
         self.retain_hand = False
-        self.free_this_turn = []
         self.clear_block()
         self.energy = self.max_energy
 

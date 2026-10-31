@@ -4,6 +4,7 @@ from ..Effects.InstantEffects.instant_block import InstantBlock
 
 
 class Rally(Card):
+    MULTIPLAYER_ONLY = True         # a co-op card: not made at random solo
     BLOCK = 12
 
     def __init__(self):
@@ -12,7 +13,7 @@ class Rally(Card):
             name = "Rally",
             card_type = CardType.SKILL,
             card_class = CardClass.COLORLESS,
-            rarity = CardRarity.UNCOMMON,
+            rarity = CardRarity.RARE,
             cost = 2,
             target_type = TargetType.ALL_ALLIES
         )

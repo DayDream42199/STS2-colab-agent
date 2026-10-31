@@ -23,14 +23,23 @@ this. The surface has not changed since it was first written.
 | `.phase.name` | Enum-like. Session only tests `== "PLAYER_TURN"`. |
 | `.result.name` | Broadcast verbatim when the fight ends. |
 | `.find_unit(unit_id)` | The unit with that id, or `None`. |
-| `.play_card(ally, hand_index, target=None)` | Play it. Return a list of JSON-safe dicts describing what happened. |
-| `.end_player_turn()` | Run the enemy turn and begin the next player turn. Raises while a choice is unanswered. |
+| `.play_card(ally, hand_index, target=None)` | Play it. Return a list of JSON-safe dicts describing what happened. Takes back this player's end turn, if they had ended. |
+| `.end_turn(ally)` | This player is done for the turn: their id goes in `.ended_turn`. Refused (as `play_card` is) outside the player turn, with a question to answer, or when defeated. Session ends the round once every player still connected has ended. |
+| `.wait(ally)` / `.may_wait(ally)` | Let the others move first: their id goes in `.waiting`, nothing else changes. Allowed only while someone else can still move the turn on - a question to answer, or not ended and not waiting - and never for a player who has ended or is already waiting. The next play, answer, end turn or departure clears every wait. So waiting never stalls a round: `tests/test_wait.py`. |
+| `.end_player_turn()` | Run the enemy turn and begin the next player turn. Raises while a choice is unanswered. Clears `.ended_turn` and `.waiting`. |
 | `.choice_for(ally)` | The question waiting on this player, or `None`. |
 | `.answer_choice(ally, option_index)` | Carry out the option they picked; returns result dicts like `play_card`. `PendingChoice.STOP` (-1) ends an "up to N" question with nothing picked, and is refused on any other. |
 | `.forfeit_choices(ally)` | A player left: answer what they were asked, and anything they are asked later, at random. Without this a fight would wait forever on them. |
 | `.ask_players` | Set True when there are players to ask; False (default) answers at random. |
-| `.legal_actions(ally)` | Every message this player may send now, as `{"type": "play_card", "hand_index", "target_id"}`, `{"type": "end_turn"}` and `{"type": "choose", "option_index"}` (-1 to stop). Listed is accepted, anything else refused - `tests/test_legal_actions.py` checks both. Also in each ally's state as `legal_actions`. |
-| `.to_dict()` | Full JSON-safe state. Broadcast verbatim after every action. |
+| `.legal_actions(ally)` | Every message this player may send now, as `{"type": "play_card", "hand_index", "target_id"}`, `{"type": "end_turn"}`, `{"type": "wait"}` (when `may_wait`) and `{"type": "choose", "option_index"}` (-1 to stop). Listed is accepted, anything else refused - `tests/test_legal_actions.py` checks both. Also in each ally's state as `legal_actions`. |
+| `.to_dict()` | Full JSON-safe state. Broadcast verbatim after every action. Each ally carries `ended_turn` and `waiting`. |
+
+**Waiting on the wire.** A client sends `wait` (no payload; `decision` is
+kept as on any action). Everyone gets a `ready_changed` - `ready`,
+`waiting_on` (who the round still needs) and `waiting` (who chose to wait) -
+and no state, since nothing in the fight changed. `ready_changed` also goes
+out when a player leaves mid-fight, so whoever waited on them decides again.
+A human never needs to send it; the terminal client does not.
 
 Session catches `ValueError`, `IndexError`, `KeyError` and `RuntimeError` from
 `play_card` and `end_player_turn`, and returns the message privately to the
@@ -65,7 +74,8 @@ behaves exactly as before.
 A third, `hand_cost`, is added by `Combat.to_dict()` (the ally alone cannot
 price a card): what each card costs to play right now, as the game prints it -
 a number after Stomp's discount, Tangled, Corruption, a Frantic Escape bump or
-a free grant; `"X"` for an X-cost card; `None` for one that cannot be played.
+a copy's own cap (a free copy, Enlightenment); `"X"` for an X-cost card; `None`
+for one that cannot be played.
 `Combat.hand_costs(ally)` gives the same list to in-process code.
 
 A fourth, `hand_damage`, is one hit of each Attack as the game shows it before
@@ -289,7 +299,7 @@ enemy move: `MonsterModel.PerformMove` hands each move all the players, and an
 attack built with `FromMonster` targets all opponents. So Butt hits both
 players for 12, Roar puts 3 Vulnerable on both, Goop slimes both. An intent
 names nobody. Intercept is the one way to change who is hit: the interceptor
-takes every teammate's hit as well as their own.
+takes the covered teammate's hit as well as their own.
 
 `Units/Enemies/_scripted.py` gives an enemy a move list and `pick_move(turn)`.
 A fixed pattern is a cycle; a random one uses `choose(branches)`, the game's
@@ -382,14 +392,52 @@ resolver does it and nothing is applied, so nothing reacting to a debuff fires.
 | Kin Follower | 58-59 | two, Minions of the Priest; Quick Slash 5, Boomerang 2 x 2, Power Dance +2 Str; the first opens with the Dance |
 | Vantom (boss) | 173 | arrives with 8 Slippery; Ink Blot 7, Inky Lance 6 x 2, Dismember 26 + 3 Wounds, Prepare +2 Str |
 | Ceremonial Beast (boss) | 252 | Stamp (Plow 150), then Plow 18 +2 Str every turn; at 150 HP the charge breaks - Strength gone, stunned a turn - then Beast Cry (Ringing: one card next turn), Stomp 15, Crush 17 +3 Str |
+| Seapunk | 44-46 | Sea Kick 11, Spinning Kick 2 x 4, Bubble Burp 7 Block +1 Str |
+| Sewer Clam | 56 | arrives with 8 Plating and 8 Block; Jet 10 / Pressurize +4 Str |
+| Haunted Ship | 63 | Haunt (3 Weak, 5 Dazed into every discard) once, then Swipe 13 / Stomp 4 x 3 |
+| Sludge Spinner | 37-39 | Oil Spray 8 +1 Weak, then at random, never twice running: Oil Spray, Slam 11, Rage 6 +3 Str |
+| Punch Construct | 55 | arrives with 1 Artifact; Ready 10 Block, Fast Punch 5 x 2 +1 Frail, Strong Punch 14 |
+| Calcified Cultist / Damp Cultist | 38-41 / 51-53 | Incantation (Ritual 2 / 5: that much Str at each enemy turn's end, from the next), then Dark Strike 9 / 1 |
+| Toadpole | 21-25 | Whirl 7, Spiken (+2 Thorns), Spike Spit (Thorns -2, then 3 x 3); the front one opens with Spiken |
+| Corpse Slug | 25-27 | two or three; Whip Slap 3 x 2, Glomp 8, Goop 2 Frail, each starting at a different one; Ravenous 4: another enemy dies, it is stunned and +4 Str |
+| Fossil Stalker | 51-53 | Latch 12, then at random, at most twice running: Latch, Tackle 9 +1 Frail, Lash 3 x 2; Suck 3: +3 Str per hit that gets through |
+| Gremlin Merc | 47-49 | Gimme 7 x 2, Double Smash 6 x 2 +2 Weak, Hehe 8 +2 Str; Surprise: dies into a Sneaky Gremlin (10-14, Tackle 9) and a Fat Gremlin (13-17, flees), both Spawned their first turn |
+| Living Fog | 80 | Advanced Gas 8 + Smoggy (one Skill a turn, for good), then Bloat 5 (sets down a Gas Bomb) / Super Gas Blast 8; Gas Bomb 7 HP, a Minion: Explode 8 and it is gone |
+| Two-Tailed Rat | 17-21 | three; Scratch 8, Disease Bite 6, Screech 1 Frail - one each to open, then at random; Call for Backup (one more rat) once per rat, three in all, after two moves, while fewer than five |
+| Terror Eel (elite) | 140 | Crash 16 / Thrash 3 x 3 +6 Vigor; Shriek 70: down to 70 HP it is stunned, then Terror (99 Vulnerable), then Crash |
+| Skulking Colony (elite) | 75 | Hardened Shell 20 (at most 20 HP lost a turn); Zoom 14, Zoom 14, Inertia 9 +2 Str, Piercing Stabs 7 x 2 |
+| Phantasmal Gardener (elite) | 26-31 | four; Bite 5, Lash 7, Flail 1 x 3, Enlarge +2 Str, opening on Flail / Bite / Lash / Enlarge; Skittish 6: Block after the first card attack each turn that gets through |
+| Lagavulin Matriarch (boss) | 222 | asleep 3 turns behind 12 Plating and Block; a hit through its Block wakes it (stunned a turn); then Slash 19, Disembowel 9 x 2, Slash 12 +12 Block, Soul Siphon (-2 Str -2 Dex on every player, +2 Str) |
+| Soul Fysh (boss) | 211 | Beckon (a Beckon into every draw and discard pile), De-Gas 16, Gaze 7 + a Beckon, Fade (2 Intangible), Scream 13 +3 Vulnerable; a Beckon held at the end of a turn costs 6 HP |
+| Waterfall Giant (boss) | 240 | Pressurize 15 Steam Eruption, then Stomp 15 +1 Weak, Ram 10, Siphon (heals 10 a player), Pressure Gun 20 (+5 each time), Pressure Up 13, each +3 Steam Eruption; brought down holding it, About to Blow, then Explode for it and dies |
 
 All 22 Overgrowth encounters can now be built (`tests/test_overgrowth.py`
-covers the eleven added since the first twenty-one); the Two-Tailed Rat, which
-also summons, is Underdocks'. Summoning: an `InstantSummon` effect goes to
+covers the eleven added since the first twenty-one), and all 20 of Underdocks
+(`tests/test_underdocks.py`). Summoning: an `InstantSummon` effect goes to
 `Combat._resolve` (like `InstantPlayCard`, it needs Combat's ids, scaling and
-rng) and brings enemies in scaled, with an intent, led by the summoner,
-optionally Stunned or a Minion. A summoned enemy waits for the next enemy
+rng) and brings enemies in scaled, led by the summoner, optionally Stunned or
+a Minion. One summoned on the players' turn picks its move at once; one
+summoned on the enemies' turn picks it with everyone once that turn is over,
+as the game's `AfterCreatureAdded`. A summoned enemy waits for the next enemy
 phase to act, as the game walks a snapshot of the lineup.
+
+**Deaths.** `Combat._check_combat_end` resolves them first
+(`_resolve_deaths`): the dead enemy's `on_death` (Phrog Parasite's Wrigglers,
+the Gremlin Merc's gremlins, an Illusion's return), Minions leaving, and
+`GameEvent.ENEMY_DIED` for the others (Corpse Slug's Ravenous) - so the last
+enemy dying into others does not win the fight. An enemy still alive after
+its `on_death` did not die (Waterfall Giant). `ScriptedEnemy.escape()` takes
+one out without a death (Fat Gremlin).
+
+**Dying mid-attack.** A dead dealer deals nothing and a dead target takes
+nothing (`Resolver._resolve_instant_damage`, as the game's
+`CreatureCmd.Damage`). The dealer is checked once per hit, as `AttackCommand`
+does (`Combat._Hits`): a hit lands on everyone it was aimed at, then the
+attack stops if Thorns or Flame Barrier killed the attacker. The rest of the
+move still happens. A move's hits should carry `effect.hit` (the `attack()`
+helper numbers them); unnumbered damage counts as one hit until a target
+repeats. A card that picks a random target per hit yields its hits one at a
+time, so each picks from the living.
 
 **Minions.** One leaves when its leader dies, and once no enemy of its own
 right is left standing (or about to revive), every Minion goes - the game's
@@ -466,6 +514,85 @@ changes that came with it, each copied from the game's code:
   pile at end of turn. **Unrelenting / One-Two Punch** are visible statuses.
 - **Stone Armor is a Power**, and three rarities moved (Bloodletting common,
   Dominate and Taunt uncommon).
+
+## The other cards: colorless, event, status, curse
+
+`tests/game_diff.py` now reads every pool a card here can come from (Ironclad,
+Colorless, Event, Status, Curse, Token; `python tests/game_diff.py Colorless`
+for one). 206 cards match exactly; 5 differ on purpose (Void stores its Energy
+loss as -1; the four Act 2 Knowledge Demon choices are deck cards here); 11
+are left out with a reason (Alchemize, Mad Science by hand, other characters'
+tokens). Each card's play code was then read beside ours; what changed:
+
+- **Values.** 22 colorless cards are Rare, not Uncommon, and Splash Uncommon;
+  the 18 Event cards are Event.
+  Beacon of Hope costs 1, Whistle 3, Rend 2 (15 + 5 per debuff, 18 + 8
+  upgraded), Mind Blast+ 0, Entrench+ 1. Knockdown+ deals 14 and multiplies by
+  3. Maul grows by 1 (2 upgraded). Relax: 15 Block (17), then 2 cards and 2
+  Energy next turn (3 and 3); Outmaneuver 2 Energy (3). Panache 10 (14), The
+  Bomb 40 (50), Giant Rock 16 (20). Toxic is playable for 1 and Exhausts.
+- **A random card** (`generatable_card_ids`) is never an Event card (new
+  `CardRarity.EVENT`), never one the game will not make in a fight (Feed, Hand
+  of Greed, Hidden Gem: `Card.GENERATED_IN_COMBAT`), and in a solo fight never
+  a co-op card (`Card.MULTIPLAYER_ONLY`; `Context.solo`). **Transform** has its
+  own pool (`transform_card_ids`): a Status into another Status, a Curse into
+  a Curse, anything else into a Common/Uncommon/Rare of its own pool.
+- **Stacked powers do more, not longer**: two Calamities add 2 Attacks, two
+  Mayhems play 2 cards, Hello World adds `amount` different Commons, Entropy
+  and Stratagem take `amount` cards, Automation gives `amount` Energy. The
+  game's instanced powers keep one count per copy played: Panache (counts from
+  when it is played, resets each turn, unpowered damage), The Bomb (own fuse
+  and damage), Rolling Boulder (each grows by 5), Automation, Knockdown (two
+  players' multiply; neither doubles its own attacks).
+- **Next-turn Energy and draw** (`delayed_energy`, `delayed_draw`) are an
+  amount paid once, as EnergyNextTurnPower / DrawCardsNextTurnPower.
+- **Panic Button** stops only a card's own Block: Entrench's doubling, a
+  power's Block and a teammate's Beacon of Hope still land (NoBlockPower).
+- **Gang Up** pays per hit a teammate landed this turn (a Twin Strike is two);
+  **Gold Axe** counts every card the team played this combat.
+- **Intercept targets one player** and covers only them (CoveredPower). Every
+  enemy attack hits every player, so redirecting the covered player's hit
+  gives the game's numbers (covered 0, interceptor x2).
+- **Tag Team** goes off for an attack on the marked enemy or one at every
+  enemy, not a random-target one (TagTeamPower).
+- **Enlightenment** caps the copies in hand at 1, this turn or until each is
+  played; upgraded, for the combat (`InstantCapCost`, `CardRef.turn_cost_cap`
+  / `cost_cap`). A card drawn afterwards costs what it costs.
+- **Upgrades skip Statuses and Curses** (`can_upgrade`): Armaments, Apotheosis
+  and the rest. Apotheosis reaches the exhaust pile too.
+- **Anointed** takes random Rares up to the hand's room; **Catastrophe** plays
+  one card at a time, a playable one over an Unplayable; **Hidden Gem** picks a
+  playable non-Curse, an Attack/Skill/Power over a Status; **Jackpot** adds
+  cards printed at 0 (upgraded if it is), not cards made free; **Jack of All
+  Trades** adds different cards, never itself; **Discovery and Splash** may be
+  skipped, and Splash+ offers upgraded Attacks; **Nostalgia** counts every
+  Attack or Skill played, Exhausted or not.
+- **Bolas and Thrumming Hatchet** go to the discard pile like any card and are
+  taken back next turn from whatever pile they are in.
+
+Then the last differences, each from the game's code:
+
+- **Free means that copy.** Discovery, Splash, Distraction, Infernal Blade and
+  Mad Science make the card they add cost 0 this turn or until it is played;
+  Metamorphosis for the whole combat, every time it is played (`free_copy`,
+  the same per-copy cap as Enlightenment; `Ally.free_this_turn` and
+  `free_this_combat` are gone). As in the game, Tangled still adds its 1 on
+  top, and a free X card still spends all your Energy.
+- **Normality, Sloth and Ringing count plays started** (`cards_started`, the
+  game's CardPlaysStarted) and stop a card that plays itself too: past the
+  cap it goes to its pile unplayed (Havoc as your third card turns up nothing).
+- **Tag Team keeps one mark per player** (`marks`): two players' marks are two
+  extra plays for a third player, and each is set off only by somebody else.
+- **Two Beacons of Hope answer each other once**: Block carries the Beacons it
+  came through (`beacons`), as the game's HasAlreadyBeenGivenBlock.
+- **Before the hand is drawn** (new `GameEvent.BEFORE_HAND_DRAW`, the game's
+  BeforeHandDraw): Hello World's cards and a returning Bolas or Thrumming
+  Hatchet arrive first, so they take hand room and are never drawn.
+- **Only a new Vulnerable, Weak or Frail skips its first count-down** on a
+  player (PowerCmd.Apply): added to one already held, it ticks with it. So
+  Doubt on a Weak player is 3 down to 2, not a held 3.
+
+Tests: `tests/test_colorless_game.py` (32 of its checks fail on the old code).
 
 ## Player choice
 
@@ -588,6 +715,17 @@ out of hand, the printed cost and the card's own damage and Block. Every other
 client gets the player format untouched. A new status needs a role in
 `card_groups.STATUS_ROLES`, or `tests/test_card_groups.py` fails.
 
+The agent also gets its actions as one fixed menu (`Plugins/action_space.py`),
+with every state and every `ready_changed`: `action_mask`, 113 numbers, 1
+where that action is open now, and `action_targets`, the unit in each target
+slot. Menu: 0-99 play, `10 x hand slot + target slot`; 100 end turn; 101
+wait; 102-111 answer option 0-9; 112 stop. Target slots: 0 none (the card
+picks its own), 1-6 the living enemies in fight order, 7-9 the other players
+in seat order. The mask is `legal_actions` laid onto the menu, and
+`action_space.decode` turns an index back into the message. A question with
+more than 10 options shows its first 10; the agent's divide-and-conquer card
+choice runs its own rounds and sends the winner's real `option_index`.
+
 It is also the Characteristic Analyzer (`Plugins/analyzer.py` has the
 arithmetic): every player who is not the agent is profiled on Aggression,
 Scaling and Teamwork, scored at each round end from that turn's history, and
@@ -599,7 +737,24 @@ analyzer's input - the spec's History: `energy`, `hand`, `used`, `opp`,
 context numbers and the profile. `python -m Plugins.history_export <log>`
 (from `Server/`) writes the input per teammate in the MockUpRB prototype's
 format, `[E_total, Used, Opp, D, B]` with each card `[cost, dmg, block,
-groups]`.
+groups]`. That is also what the teammate's `CharacteristicAnalyzer` package
+(`2nd_model/CharacteristicAnalyzer`) takes: `python -m Plugins.ca_feed <log>` feeds each turn to it and
+prints its profile beside ours (the same, at the same β; ours is 20 too).
+`python -m Plugins.ca_plot <log>` draws CA's profile: `<log>_ca.html` next to
+the log, per player the traits A, S, T by turn and, in a chart of its own,
+CA's confidence in each - one page, no libraries, opens in any browser.
+A log written without this plugin has no such lines; these three then make
+them by replaying the fight with the plugin on (see Turns, under the combat
+log).
+
+**Scripted teammates** (`Plugins/teammates.py`): five bots that play from
+`legal_actions` - aggressive (damage first), defensive (Block first), scaling
+(Powers first), team (cards for the team first) and random. A styled bot plays
+its own cards first and then the rest it can afford. `python -m
+Plugins.teammates [fights]` (from `Server/`) plays every pairing on one deck
+against Act 1 enemies, through the session with this plugin, and prints what
+the analyzer made of each style; `tests/test_teammates.py` checks that each
+stands out on its own trait.
 
 **For human players** the effects message now says what happened (`action`,
 `card_id`, `upgraded`, `target_id`; `option` for an answer), so the terminal
@@ -618,9 +773,9 @@ goes, so a crash keeps everything up to it. Each line has `seq`, `time` and
 `Server/combat_log.py`: joins, identify, `combat_start` (seed, act, enemies,
 each player's deck, full state), `turn_start` (state), every `play` (the
 card's cost, damage and Block before, and its results) and `choose`,
-`end_turn`, `round_end`, `refused` (the message and why), `error` (an
+`end_turn`, `wait`, `round_end`, `refused` (the message and why), `error` (an
 unexpected exception, with its traceback), `left`, and `combat_end` (result
-and final state). Each play, answer and end turn also carries
+and final state). Each play, answer, end turn and wait also carries
 `legal_actions`, what was open instead; an answer carries the `options` too.
 
 **Agent decisions and profile updates.** Any action a client sends may carry
@@ -638,3 +793,19 @@ recording, and says so first when a deck differs. `tests/test_combat_log.py`
 logs whole fights (one with a player leaving), replays them exactly, and
 checks that changing one recorded action is caught. A log that cannot be
 written is reported once and the fight goes on without it.
+
+**Turns.** `python -m Plugins.turn_export <log> [out.json]` (from `Server/`)
+groups the raw lines into turns: per turn, the state it began with and each
+player's moves (play, choose, end turn, wait, refused, left) in the order
+they made them, each its log line less `time`, `unit_id` and `role`, with its
+`seq` showing how the players' moves fell together. It prints the fight a
+turn at a time ("Bash -> e1  8 to e1 (79 HP left), vulnerable 2 on e1") and
+writes the whole of it to `<log>_turns.json`. Each player's turn also holds
+the aura plugin's `analyzer_input` and `profile_update` for it. A log written
+without the plugin gets them rebuilt (`history_export.load` / `rebuild`):
+`combat_log.replay` now takes a `plugin` and a `log` (`MemoryLog`, lines kept
+in a list), so the fight is played again from its seed with the plugin on.
+The rebuilt lines are marked `rebuilt`, the profiles are at today's beta, and
+they stop at the first move the replay could not make the same way (another
+card, or one refused), since past it the replay is another fight; a note says
+which. Tests: `tests/test_turn_export.py`.

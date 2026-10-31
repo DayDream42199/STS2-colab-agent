@@ -16,6 +16,7 @@ from ..Effects.InstantEffects.instant_upgrade_card import InstantUpgradeCard
 from ..Effects.InstantEffects.instant_boost_card import InstantBoostCard
 from ..Effects.InstantEffects.instant_grant_replay import InstantGrantReplay
 from ..Effects.InstantEffects.instant_raise_cost import InstantRaiseCost
+from ..Effects.InstantEffects.instant_cap_cost import InstantCapCost
 from ..Effects.StatusEffects._status_effect import StatusEffect
 from ..Cards._card_ref import new_ref, take
 from ..Units.Enemies._scripted import scaled_block
@@ -56,6 +57,8 @@ class Resolver:
             return Resolver._resolve_instant_grant_replay(effect)
         if isinstance(effect, InstantRaiseCost):
             return Resolver._resolve_instant_raise_cost(effect)
+        if isinstance(effect, InstantCapCost):
+            return Resolver._resolve_instant_cap_cost(effect)
         if isinstance(effect, StatusEffect):
             return Resolver._resolve_status(effect)
         raise NotImplementedError(
@@ -80,6 +83,16 @@ class Resolver:
     @staticmethod
     def _resolve_instant_damage(effect):
         target = effect.target
+        # As the game's CreatureCmd.Damage: a dead dealer deals nothing and a
+        # dead target takes nothing. The dealer is looked at once per hit -
+        # Combat._Hits marks whether it was alive when the hit began, so a hit
+        # still lands on every player after the first one's Thorns killed the
+        # attacker; the next hit does not come. The rest of the move goes on.
+        dealer_alive = getattr(effect, "dealer_alive", None)
+        if dealer_alive is None:
+            dealer_alive = effect.source.is_alive()
+        if not dealer_alive or not target.is_alive():
+            return None
         amount = Resolver.damage_amount(effect.source, target, effect.amount, effect.is_attack)
         if effect.is_attack:
             # A bonus that lasts one attack (Vigor) is spent now, not while the
@@ -210,8 +223,14 @@ class Resolver:
 
     @staticmethod
     def _resolve_instant_upgrade_card(effect):
+        # Here, not at module level: the registry imports the cards, which
+        # import the effects this module resolves.
+        from ..Registry.card_registry import can_upgrade
+
         upgraded = []
         for card_ref in effect.card_refs:
+            if not can_upgrade(card_ref):
+                continue             # a Status or Curse: nothing to upgrade
             # A bare id is a copy nobody can tell apart, so there is nothing
             # to mark - it stays un-upgraded rather than upgrading them all.
             if getattr(card_ref, "upgraded", None) is False:
@@ -268,6 +287,25 @@ class Resolver:
             "target_id": effect.target.unit_id,
             "card_ids": raised,
             "amount": effect.amount,
+        }
+
+    @staticmethod
+    def _resolve_instant_cap_cost(effect):
+        capped = []
+        field = "cost_cap" if effect.this_combat else "turn_cost_cap"
+        for card_ref in effect.card_refs:
+            if hasattr(card_ref, field):
+                held = getattr(card_ref, field)
+                # Only ever down (reduceOnly): a lower cap already set stays.
+                setattr(card_ref, field,
+                        effect.amount if held is None else min(held, effect.amount))
+                capped.append(card_ref)
+        return {
+            "effect_id": effect.effect_id,
+            "source_id": effect.source.unit_id,
+            "target_id": effect.target.unit_id,
+            "card_ids": capped,
+            "amount": len(capped),
         }
 
     @staticmethod
@@ -401,8 +439,11 @@ class Resolver:
         Co-op scaling for an enemy's own Block, before Dexterity and the
         multipliers, as in the reference. Allies have no block_scale. Rounded
         like the reference, not floored: Reload's 3 at three players is
-        3 x 3.3 = 9.9, and the reference blocks 10."""
-        amount = scaled_block(amount, getattr(target, "block_scale", 1.0))
+        3 x 3.3 = 9.9, and the reference blocks 10. Only a move's Block: Block
+        a power grants (an enemy's Plating) is not scaled, as the game's
+        MultiplayerScalingModel skips all but IsPoweredCardOrMonsterMoveBlock."""
+        if powered and card:
+            amount = scaled_block(amount, getattr(target, "block_scale", 1.0))
         for status in Resolver._ordered(target):
             if status.BLOCK_POWERED_ONLY and not (powered and card):
                 continue
@@ -450,10 +491,13 @@ class Resolver:
                 "amount": 0,
                 "blocked_by": "artifact",
             }
+        fresh = effect.effect_id not in target.statuses
         target.apply_status(copy.copy(effect))
         held = target.statuses[effect.effect_id]
-        if held.TICKS_AFTER_ENEMY_TURN and getattr(target, "hand", None) is not None:
-            # A player's Vulnerable / Weak / Frail skips its next count-down.
+        if fresh and held.TICKS_AFTER_ENEMY_TURN and getattr(target, "hand", None) is not None:
+            # A player's new Vulnerable / Weak / Frail skips its next
+            # count-down. Only a new one, as the game's PowerCmd.Apply: added
+            # to one already held, it ticks as that one does (Doubt, Shame).
             held.skip_next_tick = True
         return {
             "effect_id": effect.effect_id,

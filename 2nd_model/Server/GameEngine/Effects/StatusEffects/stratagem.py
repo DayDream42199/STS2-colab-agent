@@ -27,12 +27,17 @@ class Stratagem(StatusEffect):
         if not ally.draw_pile:
             return None
 
-        def take(chosen):
-            return [InstantMoveCard(
-                source=ally, target=ally, card_ids=[chosen],
-                from_pile=InstantMoveCard.DRAW,
-                to_pile=InstantMoveCard.HAND)]
-
-        context.ask(ally, "Take a card from the reshuffled Draw Pile",
-                    lambda: list(ally.draw_pile), take)
+        # `amount` cards, one question at a time (two Stratagems, two cards).
+        def ask(left):
+            if left <= 0 or not ally.draw_pile:
+                return
+            def take(chosen):
+                ask(left - 1)
+                return [InstantMoveCard(
+                    source=ally, target=ally, card_ids=[chosen],
+                    from_pile=InstantMoveCard.DRAW,
+                    to_pile=InstantMoveCard.HAND)]
+            context.ask(ally, "Take a card from the reshuffled Draw Pile",
+                        lambda: list(ally.draw_pile), take)
+        ask(self.amount)
         return None

@@ -13,6 +13,15 @@ class Strength(StatusEffect):
         self.target = target
         self.amount = amount
 
+    @property
+    def IS_DEBUFF(self):
+        # Below zero it is one, and Artifact stops it - the game's
+        # GetTypeForAmount (Soul Siphon's -2).
+        return self.amount < 0
+
+    def is_expired(self):
+        return self.amount == 0     # below zero it stays (AllowNegative)
+
     def modify_outgoing_damage(self, amount, target=None):
         return amount + self.amount
 
