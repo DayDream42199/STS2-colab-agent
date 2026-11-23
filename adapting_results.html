@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body { margin: 0; } [hidden] { display: none !important; }</style>
+<title>Does Adapting to Teammates Pay?</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, with the evidence charts running wider than the text. */
+:root {
+  --bg: #f2f5f3; --panel: #fbfcfb; --ink: #10201d; --ink-2: #44544f; --muted: #64736f;
+  --line: #dde4e0; --axis: #b9c5c0; --accent: #0b5f57; --tint: #e3eeea;
+  --s-full: #2a78d6; --s-low: #eb6834; --s-cheese: #1baf7a; --s-pair: #8a5fd1;
+  --ring: var(--panel);
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1615; --panel: #182120; --ink: #e8efec; --ink-2: #b7c4bf; --muted: #8b9a95;
+    --line: #2a3532; --axis: #43504c; --accent: #7dd3c4; --tint: #1c2d2a;
+    --s-full: #3987e5; --s-low: #d95926; --s-cheese: #199e70; --s-pair: #9d78e0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1615; --panel: #182120; --ink: #e8efec; --ink-2: #b7c4bf; --muted: #8b9a95;
+  --line: #2a3532; --axis: #43504c; --accent: #7dd3c4; --tint: #1c2d2a;
+  --s-full: #3987e5; --s-low: #d95926; --s-cheese: #199e70; --s-pair: #9d78e0;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 1.0625rem; line-height: 1.6; }
+.page {
+  max-width: 58rem; margin-inline: auto; display: flex; flex-direction: column; gap: clamp(2.75rem, 6vw, 4.25rem);
+  padding-block: clamp(2rem, 6vw, 4rem) 4rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header, section { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+header > *, section > p, section > ul, section > ol, section > dl, section > h2, section > h3 { max-width: 42rem; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 700; text-wrap: balance; }
+h1 { margin: 0; font-size: clamp(2.3rem, 6.5vw, 3.75rem); line-height: 1.03; letter-spacing: -.02em; }
+h2 { font-size: clamp(1.4rem, 3.2vw, 1.9rem); line-height: 1.15; font-weight: 600; letter-spacing: -.01em; }
+h3 { font-size: 1rem; line-height: 1.35; }
+a { color: var(--accent); text-underline-offset: 2px; }
+.eyebrow { font-family: var(--font-data); font-size: .8125rem; color: var(--muted); letter-spacing: .01em; }
+.answer { font-size: clamp(1.15rem, 2.4vw, 1.35rem); line-height: 1.45; }
+.ask { background: var(--tint); border-radius: 10px; padding: .9rem 1.2rem; }
+.note { font-size: .9375rem; color: var(--ink-2); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: clamp(.875rem, 2.5vw, 1.5rem); display: flex; flex-direction: column; gap: .9rem; min-width: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* legends */
+.legend { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; font-size: .875rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: .45rem; }
+.legend svg { flex: none; }
+
+/* dot plots: a grid of label, plot, value, drawn to one scale in percent */
+.dp { display: flex; flex-direction: column; min-width: 0; }
+.dp-row { display: grid; grid-template-columns: minmax(0, 16.5rem) minmax(0, 1fr) 7.25rem; column-gap: .9rem; align-items: stretch; border-radius: 4px; }
+.dp-row[tabindex]:hover, .dp-row[tabindex]:focus-visible { background: var(--tint); --ring: var(--tint); }
+.dp-label { font-size: .9rem; line-height: 1.3; padding: .32rem 0 .32rem .25rem; min-width: 0; }
+.dp-label small { display: block; font-size: .78rem; color: var(--muted); }
+.dp-plot { position: relative; min-height: 1.9rem; }
+.dp-value { font-family: var(--font-data); font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; align-self: center; padding-right: .25rem; white-space: nowrap; }
+.dp-head { font-size: .8125rem; font-weight: 700; color: var(--ink-2); padding: .85rem .25rem .2rem; }
+.dp-head:first-child { padding-top: 0; }
+.dp-col { font-size: .78rem; color: var(--muted); text-align: right; padding-right: .25rem; align-self: end; }
+.gl, .zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.zero { background: var(--axis); width: 2px; margin-left: -1px; }
+.whisker { position: absolute; top: 50%; height: 2px; margin-top: -1px; border-radius: 1px; background: var(--c); }
+.mark { position: absolute; top: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); background: var(--c); box-shadow: 0 0 0 2px var(--ring); box-sizing: border-box; }
+.mark.circle { border-radius: 50%; }
+.mark.square { border-radius: 2px; }
+.mark.diamond { width: 9px; height: 9px; border-radius: 1px; transform: translate(-50%, -50%) rotate(45deg); }
+.mark.hollow { background: var(--ring); border: 2px solid var(--c); }
+.dp-axis { border-top: 1px solid var(--axis); margin-top: .1rem; }
+.dp-axis .dp-plot { min-height: 1.5rem; }
+.tick { position: absolute; top: .25rem; transform: translateX(-50%); font-family: var(--font-data); font-size: .75rem; color: var(--muted); white-space: nowrap; }
+.dir { display: flex; justify-content: space-between; gap: 1rem; font-size: .78rem; color: var(--muted); }
+@media (max-width: 680px) {
+  .dp-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label value" "plot plot"; }
+  .dp-label { grid-area: label; } .dp-value { grid-area: value; } .dp-plot { grid-area: plot; min-height: 1.4rem; }
+  .dp-axis { grid-template-columns: minmax(0, 1fr); grid-template-areas: "plot"; }
+  .dp-axis .dp-label, .dp-axis .dp-value, .dp-colrow .dp-label, .dp-colrow .dp-plot { display: none; }
+  .dp-colrow { grid-template-areas: "value"; grid-template-columns: minmax(0, 1fr); }
+}
+
+/* line charts */
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); gap: 1.25rem; }
+.lc { min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
+.lc-plot { min-width: 0; border-radius: 4px; touch-action: pan-y; }
+.lc-plot svg { display: block; }
+.lc-plot text { font-family: var(--font-data); font-size: 11.5px; fill: var(--muted); }
+
+/* tables */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
+caption { text-align: left; font-size: .875rem; color: var(--ink-2); padding-bottom: .5rem; }
+th, td { padding: .5rem .75rem .5rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+thead th { font-size: .8125rem; color: var(--muted); font-weight: 700; border-bottom-color: var(--axis); }
+tbody th { font-weight: 400; }
+tbody tr:last-child > * { border-bottom: 0; }
+td.num, th.num { font-family: var(--font-data); font-size: .875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+details { font-size: .875rem; color: var(--ink-2); }
+summary { cursor: pointer; color: var(--accent); }
+details .scroll { margin-top: .6rem; }
+details table { font-size: .8125rem; }
+
+/* blocks */
+.open { background: var(--tint); border-radius: 10px; padding: 1rem 1.2rem; display: flex; flex-direction: column; gap: .4rem; max-width: 42rem; }
+.open p { margin: 0; }
+.chip { align-self: flex-start; font-family: var(--font-data); font-size: .75rem; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+dl { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .55rem 1rem; }
+dt { font-weight: 700; }
+dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 520px) { dl { grid-template-columns: minmax(0, 1fr); gap: 0; } dd { margin-bottom: .7rem; } }
+section > ul { padding-left: 1.15rem; display: flex; flex-direction: column; gap: .5rem; }
+.options { list-style: none; padding: 0; counter-reset: option; display: flex; flex-direction: column; gap: 1rem; }
+.options li { counter-increment: option; display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); }
+.options li::before { content: counter(option); font-family: var(--font-data); font-weight: 500; color: var(--accent); }
+.options p { margin: .1rem 0 0; color: var(--ink-2); }
+footer { font-size: .8125rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 1rem; }
+#tip { position: fixed; z-index: 20; max-width: 19rem; background: var(--panel); color: var(--ink); border: 1px solid var(--axis); border-radius: 6px; padding: .45rem .65rem; font-size: .8125rem; line-height: 1.35; box-shadow: 0 4px 14px rgba(0, 0, 0, .18); pointer-events: none; display: flex; flex-direction: column; gap: .2rem; }
+#tip .tip-row { display: flex; gap: .45rem; align-items: baseline; }
+#tip strong { font-family: var(--font-data); font-weight: 500; white-space: nowrap; }
+#tip .tip-sub { color: var(--ink-2); }
+#tip .tip-key { width: 12px; height: 2px; flex: none; align-self: center; border-radius: 1px; }
+tr.group th { font-weight: 700; color: var(--ink-2); font-size: .8125rem; padding-top: .9rem; }
+.older { font-size: 1rem; color: var(--ink); display: flex; flex-direction: column; gap: 1.1rem; padding-top: 1rem; min-width: 0; }
+.older p { margin: 0; }
+.older h3 { margin: .6rem 0 0; }
+</style>
+
+<main class="page">
+  <header>
+    <p class="eyebrow">Slay the Spire 2 co-op agent · results up to 7 November 2026</p>
+    <h1>Does adapting to teammates pay?</h1>
+    <p class="answer">A little, so far. We now have a much stronger agent, and it clearly changes who it protects according to each teammate's style. That change barely moves wins or score: with the right profiles, both teammates survive about 2 points more often, and a recheck on new fights narrowly missed our bar.</p>
+    <p class="ask"><strong>Decision needed:</strong> our aim is an agent players are comfortable playing with. We now have a proposed definition of comfort and first measures from simulated fights, but only real players can settle it. We need to agree the definition and plan real games. The <a href="#options">options are at the end of this page</a>.</p>
+  </header>
+
+  <section id="best">
+    <h2>The agent is much stronger than it was</h2>
+    <p>Two changes did most of this. A new network gives every card-and-target pair one shared scorer, replacing a network that learned each seat separately and formed seat habits. A reward that charges more for teammates' HP loss and knockouts then added a little more, mostly on one seed. The best agent so far uses both, after 1M training steps.</p>
+    <div class="panel">
+      <h3>Win rate and both teammates alive, next to two teammates of one style</h3>
+      <div class="legend" id="legend-ladder"></div>
+      <div class="dp" id="chart-ladder" role="group" aria-label="Win rate and both teammates alive for each agent, at low HP and at full HP"></div>
+    </div>
+    <p class="note">1,000 fights per teammate style and HP setting. Differences between two agents are good to about ±2.5 to ±3 points at low HP. Every loss is a wipe, so winning more also keeps more teammates alive: about three quarters of the pair network's first survival gain came from winning more. The best agent is the top of 15 tested on the same fights, so its numbers are probably slightly flattering.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>What we changed since the last version of this page, in order</caption>
+          <thead><tr><th scope="col">Change</th><th scope="col">Result</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Fixed how Lift and Intercept reach the agent</th><td>Agents can now read the two cards that protect a chosen teammate. Every result in the last section of this page came before this fix.</td></tr>
+            <tr><th scope="row">Survival reward, old network</th><td>Up to 70% more protective cards, mostly to one fixed seat. Wins and survival could not be told apart from the other rewards.</td></tr>
+            <tr><th scope="row">Sorting teammates by risk in the agent's input</th><td>Seed 0 kept more teammates alive and seed 1 did not (both alive +0.8 ± 2.2 pooled). Since then we test everything on at least two seeds.</td></tr>
+            <tr><th scope="row">Pair network</th><td>Beat the old network on every seed pairing. Low-HP win went from 66% to 75–79%, and both alive from 47% to 55–58%. The seat habit disappeared.</td></tr>
+            <tr><th scope="row">Twice the training, 1M steps</th><td>Seed 1 improved (low-HP win +4.0 ± 2.5) and seed 0 did not (+0.0 ± 2.5). Our bar needed both, so it was missed.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="profile">
+    <h2>It now reacts to the profile, but results barely move</h2>
+    <p>Lift and Intercept protect one chosen teammate. We gave the agent one aggressive and one defensive teammate, told it their styles correctly or the wrong way round, and counted who got these cards. Every pair-network agent sends most of them to whoever it is told is aggressive, so swapping the labels moves the cards to the other player. The old network ignores the label.</p>
+    <div class="panel">
+      <h3>Share of Lift and Intercept going to the teammate shown as aggressive, %</h3>
+      <div class="legend" id="legend-follow"></div>
+      <div class="dp" id="chart-follow" role="group" aria-label="Share of Lift and Intercept going to the teammate shown as aggressive, for each agent, with true and swapped profiles"></div>
+    </div>
+    <p class="note">Low-HP fights. Both marks sit on the right because each one counts the teammate the agent was told is aggressive, and that is a different player in the two tests. 2,000 fights per side, and 6,000 on the 1M agents.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>What that pays: the 1M agents with true profiles minus swapped profiles, low HP, 24,000 new fights. Our bar, set before the test, was both teammates alive above zero with the margin clear, on both seeds. Seed 1 narrowly missed it.</caption>
+          <thead><tr><th scope="col">Points</th><th scope="col" class="num">Seed 0</th><th scope="col" class="num">Seed 1</th><th scope="col" class="num">Both seeds</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Both teammates alive</th><td class="num">+2.0 ± 1.7</td><td class="num">+1.6 ± 1.7</td><td class="num">+1.8 ± 1.2</td></tr>
+            <tr><th scope="row">Win</th><td class="num">+0.8 ± 1.4</td><td class="num">+0.3 ± 1.3</td><td class="num">+0.5 ± 1.0</td></tr>
+            <tr><th scope="row">Score out of 100</th><td class="num">+0.8 ± 1.1</td><td class="num">+0.5 ± 1.1</td><td class="num">+0.7 ± 0.8</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">The first test gave +4.0 and +5.8 (±3.0) on both alive, and those numbers more than halved on new fights. At full HP the score advantage is +0.3 ± 0.3. Lift and Intercept are only about 2.3 cards per fight, which may be why so little moves.</p>
+    <p>With the right profiles the aggressive teammate survives more often (+3.8 ± 1.2) and the defensive one a little less (−1.2 ± 1.1). Aggressive players defend themselves less, so this may be sensible play. It helps in some fights and hurts in others. We found this split after seeing the results, so it is a lead and has not been tested on its own.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>Both teammates alive at low HP, by who started with lower HP, %</caption>
+          <thead><tr><th scope="col">Started lower</th><th scope="col" class="num">True profiles</th><th scope="col" class="num">Swapped profiles</th><th scope="col" class="num">Difference</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Aggressive teammate</th><td class="num">60.3</td><td class="num">53.9</td><td class="num">+6.5 ± 2.1</td></tr>
+            <tr><th scope="row">Same HP</th><td class="num">75.8</td><td class="num">73.6</td><td class="num">+2.1 ± 2.1</td></tr>
+            <tr><th scope="row">Defensive teammate</th><td class="num">59.7</td><td class="num">62.8</td><td class="num">−3.1 ± 2.1</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="target">
+    <h2>Rules on who to protect add no clear gain, and a rule on when removes most of the waste</h2>
+    <p>We kept the agents' timing and forced only the target of Lift and Intercept, to the lower-HP or the higher-HP teammate. Card counts per fight stayed the same, so this shows the effect of the target alone. Sending everything to the wrong teammate clearly hurts (both alive +5.2 ± 1.5 for lower against higher). Sending everything to the lower-HP teammate adds no clear gain over the agent's own choice (+0.8 ± 1.5 on same-style teams, +0.4 ± 1.2 on mixed teams).</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>Low-HP fights, %. 36,800 fights on same-style teams (four pair agents) and 12,000 with the rule on mixed teams (the two 1M agents).</caption>
+          <thead><tr><th scope="col">Measure</th><th scope="col" class="num">All to lower-HP</th><th scope="col" class="num">Agent's own choice</th><th scope="col" class="num">All to higher-HP</th></tr></thead>
+          <tbody>
+            <tr class="group"><th scope="rowgroup" colspan="4">Same-style teammates</th></tr>
+            <tr><th scope="row">Both teammates alive</th><td class="num">57.4</td><td class="num">56.6</td><td class="num">52.3</td></tr>
+            <tr><th scope="row">Teammate starting at 25% alive</th><td class="num">31.6</td><td class="num">28.5</td><td class="num">23.3</td></tr>
+            <tr><th scope="row">Win</th><td class="num">77.2</td><td class="num">76.7</td><td class="num">75.8</td></tr>
+            <tr class="group"><th scope="rowgroup" colspan="4">One aggressive and one defensive teammate</th></tr>
+            <tr><th scope="row">Both teammates alive</th><td class="num">64.9</td><td class="num">64.5</td><td class="num">not run</td></tr>
+            <tr><th scope="row">Teammate starting at 25% alive</th><td class="num">37.9</td><td class="num">35.4</td><td class="num">not run</td></tr>
+            <tr><th scope="row">Win</th><td class="num">83.5</td><td class="num">83.0</td><td class="num">not run</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">On mixed teams the 25% row counts fights where the other teammate started higher. A teammate starting at 25% gains a little in both tests (+3.2 ± 2.2 and +2.4 ± 2.2), though neither was part of a bar. On mixed teams both alive is 64.5% with the agent's own choice, 64.9% with the HP rule and 62.6% with swapped profiles, so for who gets protected the profile adds nothing measurable over plain HP, while wrong profiles do hurt. The rule has no measured cost and is easy for a player to predict, so it stays an option for real games.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>Three rules placed on top of the 1M agents, minus the agents' own play. Low HP, mixed teams, the same new fights, 12,000 per rule. The first two needed both alive clear of zero on both seeds. The timing rule was aimed at comfort, so it needed covered plays down by half on both seeds with both alive and win not clearly lower.</caption>
+          <thead><tr><th scope="col">Rule</th><th scope="col" class="num">Both alive</th><th scope="col" class="num">Win</th><th scope="col" class="num">Score</th><th scope="col" class="num">Covered plays per fight</th><th scope="col">Bar</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Send to the lower-HP teammate</th><td class="num">+0.4 ± 1.2</td><td class="num">+0.6 ± 1.0</td><td class="num">+0.3 ± 0.8</td><td class="num">not logged</td><td>Missed</td></tr>
+            <tr><th scope="row">Send to whoever would lose the most through their Block</th><td class="num">+0.4 ± 1.2</td><td class="num">+0.8 ± 0.9</td><td class="num">+0.6 ± 0.8</td><td class="num">0.95 → 0.90</td><td>Missed</td></tr>
+            <tr><th scope="row">Hold back when no teammate is in danger</th><td class="num">+0.5 ± 1.2</td><td class="num">+1.2 ± 0.9</td><td class="num">+0.9 ± 0.8</td><td class="num">0.95 → 0.05</td><td><strong>Passed</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">Rules on who gets the cards change little because in most wasted plays neither teammate needs protecting. The large fall in covered plays is built into the timing rule, so what matters is its cost. With the rule the agent spends the freed turns mostly on Wait, Strike, ending its turn and Defend. A wider check on 12,000 more fights showed no clear change on same-style teams at low HP (both alive −0.4 ± 2.1, win +0.1 ± 1.7) or across all teams at full HP (both alive +0.0 ± 0.5, win +0.1 ± 0.2), so the win gain above did not repeat. That check narrowly missed its bar, which needed no clear fall on either agent in either group: at full HP the best agent lost 7 of 4,000 fights instead of 1. The rule may therefore have a very small cost.</p>
+  </section>
+
+  <section id="comfort">
+    <h2>What comfort could mean</h2>
+    <p>A collaborative agent can score below a general agent and still be the better teammate. We propose this definition for the team to agree or change: a player can play their own way without having to worry about the bot. It splits into five feelings. Simulated fights can show signs of some of them, and whether those signs track comfort is untested.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <thead><tr><th scope="col">What the player feels</th><th scope="col">What we can measure</th><th scope="col">Where we stand</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">"I can play my way"</th><td>Results next to each play style</td><td><strong>Looks good.</strong> The best agent wins 100.0% next to aggressive teammates and 99.9% next to defensive ones at full HP. The old network wins 96–98% and 85–87%.</td></tr>
+            <tr><th scope="row">"It covers me when I'm in trouble"</th><td>Rounds teammates spend knocked out, and survival of the weakest</td><td><strong>Better, with a weak spot.</strong> Teammates spend 7.4% of their rounds knocked out at low HP, against 11.4% with the old network. A teammate starting at 25% next to two healthy players still survives only about 39% of the time.</td></tr>
+            <tr><th scope="row">"I can tell what it'll do"</th><td>Asking players</td><td><strong>Unknown.</strong> On mixed teams it follows the style label more than HP, which a careful player may read as being ignored.</td></tr>
+            <tr><th scope="row">"It doesn't waste my turn or keep me waiting"</th><td>Unused Block, overkill and pauses</td><td><strong>Mixed.</strong> Overkill is small, but 38–48% of its Lift and Intercept plays land on a teammate who is already covered. A rule that holds these cards back when nobody is in danger removes about 95% of those plays at little or no measured cost. It usually plays its first card at once and then pauses about 3.7 times a turn, so a player who waits for the bot could stall. Teammates who act after its first card change nothing. If they act only after it ends its turn, its low-HP win falls 8 to 9 points, partly because their energy gifts arrive too late.</td></tr>
+            <tr><th scope="row">"My plays still matter"</th><td>Teammates' share of damage and kills, and asking players</td><td><strong>A concern.</strong> Two teammates would deal 67% of the damage if all three shared evenly. They deal 59% next to this agent if aggressive and 40% if defensive, against 71% and 51% with the old network. The stronger agent carries more of the fight.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>The measures, %, except Waits per turn. 400 fights per team and HP setting, 3,200 per agent, across two teammates of each style and one of each.</caption>
+          <thead><tr><th scope="col">Measure</th><th scope="col" class="num">Best agent</th><th scope="col" class="num">Other 1M seed</th><th scope="col" class="num">Old network</th><th scope="col" class="num">Bodyguard script</th><th scope="col" class="num">Cheese bot</th></tr></thead>
+          <tbody>
+            <tr class="group"><th scope="rowgroup" colspan="6">Waste</th></tr>
+            <tr><th scope="row">Lift or Intercept on a teammate already covered</th><td class="num">37.7</td><td class="num">47.6</td><td class="num">37.9</td><td class="num">0.0</td><td class="num">0.0</td></tr>
+            <tr><th scope="row">Agent's Block on itself left unused</th><td class="num">63.0</td><td class="num">60.6</td><td class="num">54.6</td><td class="num">36.7</td><td class="num">28.6</td></tr>
+            <tr><th scope="row">Agent's Block on teammates left unused</th><td class="num">58.4</td><td class="num">58.9</td><td class="num">58.5</td><td class="num">45.7</td><td class="num">32.1</td></tr>
+            <tr><th scope="row">Attack damage past what the target had left</th><td class="num">4.5</td><td class="num">4.5</td><td class="num">3.9</td><td class="num">2.4</td><td class="num">1.4</td></tr>
+            <tr class="group"><th scope="rowgroup" colspan="6">Waiting</th></tr>
+            <tr><th scope="row">Waits per turn</th><td class="num">3.7</td><td class="num">3.7</td><td class="num">3.8</td><td class="num">3.6</td><td class="num">0.0</td></tr>
+            <tr><th scope="row">Turns that start with a Wait</th><td class="num">0.8</td><td class="num">9.8</td><td class="num">0.2</td><td class="num">96.7</td><td class="num">0.0</td></tr>
+            <tr><th scope="row">Cards played after every teammate finished</th><td class="num">14.0</td><td class="num">38.9</td><td class="num">10.8</td><td class="num">100.0</td><td class="num">1.9</td></tr>
+            <tr class="group"><th scope="rowgroup" colspan="6">Teammates' share of the team, even split 67</th></tr>
+            <tr><th scope="row">Damage, next to aggressive teammates</th><td class="num">59.0</td><td class="num">60.7</td><td class="num">70.5</td><td class="num">62.7</td><td class="num">77.8</td></tr>
+            <tr><th scope="row">Damage, next to defensive teammates</th><td class="num">39.9</td><td class="num">38.9</td><td class="num">51.3</td><td class="num">44.2</td><td class="num">67.5</td></tr>
+            <tr><th scope="row">Kills, next to aggressive teammates</th><td class="num">54.8</td><td class="num">50.5</td><td class="num">72.6</td><td class="num">62.3</td><td class="num">77.5</td></tr>
+            <tr><th scope="row">Kills, next to defensive teammates</th><td class="num">32.6</td><td class="num">29.5</td><td class="num">52.2</td><td class="num">46.0</td><td class="num">70.9</td></tr>
+            <tr class="group"><th scope="rowgroup" colspan="6">Teammate rounds spent knocked out</th></tr>
+            <tr><th scope="row">Low HP</th><td class="num">7.4</td><td class="num">7.7</td><td class="num">11.4</td><td class="num">12.3</td><td class="num">13.0</td></tr>
+            <tr><th scope="row">Full HP</th><td class="num">0.2</td><td class="num">0.6</td><td class="num">1.8</td><td class="num">3.1</td><td class="num">3.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">Most margins are about ±1 point. The covered row doesn't count a teammate protected by someone's Intercept; counting that gives 35–45% for the two 1M agents on mixed teams at low HP. In a later check of those plays, the other teammate was safe too in 97% of covered Lifts and 89% of covered Intercepts, and no attack was coming at all in 62% and 46%, so the waste is mainly about when the agent plays these cards. Unused Block is Block still on a player when the enemy turn ends, charged to whoever added Block to that player last in the round. It isn't always a mistake, since a card left in hand is discarded anyway. A Wait lets each teammate take one action, and with a real player it would mean a pause of unknown length. The scripted teammates block without checking what is coming, so real players will differ.</p>
+  </section>
+
+  <section id="method">
+    <h2>How we test it</h2>
+    <dl>
+      <dt>Agent</dt><dd>A MaskablePPO network playing one seat on our port of the Act 1 engine. It trains next to one to three scripted teammates, and the tests here mostly use two.</dd>
+      <dt>Best agent</dt><dd>The pair network with the survival reward after 1M training steps, seed 1. The reward's collaboration bonus is off.</dd>
+      <dt>Profile</dt><dd>Three numbers built from a teammate's plays: Aggression (attack or Block), Scaling (invest or play for now) and Teamwork (help others or self).</dd>
+      <dt>Advantage</dt><dd>The agent's result when shown each teammate's true profile, minus its result when shown the other style's profile.</dd>
+      <dt>Score</dt><dd>100 minus penalties for losing, HP lost, knockouts, enemy HP left and long fights, always on the default weights so that runs with different rewards compare. Scores only compare at the same starting HP.</dd>
+      <dt>Survival reward</dt><dd>Charges a teammate's HP loss and knockouts more than the agent's own during training.</dd>
+      <dt>Low HP</dt><dd>Each player starts at 100, 100, 75, 50 or 25% of max HP, drawn per player per fight. This stands in for the game carrying HP between fights.</dd>
+      <dt>Rules</dt><dd>Wait lets each teammate take one action before the agent moves. The scripted teammates never wait back.</dd>
+      <dt>Fights</dt><dd>Act 1 elite and boss fights with a fixed 24-card deck in every seat. Teammates are bots that favour attacks or favour Block.</dd>
+    </dl>
+  </section>
+
+  <section id="earlier">
+    <h2>Earlier results, from before the card fix</h2>
+    <p>These used the older network and the misdescribed cards, so they are not final. Their main points still guide the work.</p>
+    <ul>
+      <li><strong>Knowing a style added no points.</strong> Advantage was −0.10 ± 0.28 under normal rules and −0.08 ± 0.59 without Wait.</li>
+      <li><strong>Switching to the right specialist added almost nothing,</strong> at most about +0.3 points across all 10 test teams with or without Wait.</li>
+      <li><strong>Training at low HP did not help.</strong> Those agents scored level or lower and still didn't favour the weaker teammate.</li>
+      <li><strong>Seeing teammates act first is worth a lot.</strong> Removing Wait cost the agents 5.8 points and the Cheese bot 1.1. On a carried-HP route the general agent cleared 72% with Wait and 32% without. Real players may not let the agent move after them. Part of this gain may be the extra energy described under the limits below, because Wait lets the agent use it the same turn.</li>
+      <li><strong>Carried HP makes fights far harder.</strong> Boss win rate fell from 82–89% to 41–56% next to aggressive teammates, and from 54–76% to 33–53% next to defensive ones.</li>
+      <li><strong>One result is still open.</strong> With hidden hands on boss fights, each specialist beat the other next to its own teammate type, on one seed only.</li>
+    </ul>
+    <details>
+      <summary>Show the older charts and tables</summary>
+      <div class="older">
+        <h3>Advantage point, older agents</h3>
+            <div class="panel">
+      <div class="legend" id="legend-adv"></div>
+      <div class="dp" id="chart-adv" role="group" aria-label="Advantage point for each setting, with margins"></div>
+    </div>
+    <p class="note">Each line is a 95% margin that counts fight luck only, so differences between training runs would widen it. For scale, a trained agent leads the scripted Cheese bot by about 15 points, and being able to Wait is worth about 6. A first run of variant 4 next to blended teammates gave +2.2 ± 1.0; the fresh run shown here did not repeat it. Same-style teammates at low HP gave −1.5 ± 3.3 and −0.5 ± 3.3.</p>
+        <h3>Switching to the right specialist</h3>
+            <p>This compares the right specialist for each team with the best single agent, as a rough ceiling on what adapting could add. Picking the best per team after the fact flatters these numbers.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <thead><tr><th scope="col">Setting</th><th scope="col">Gain from switching</th><th scope="col">Reading</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Normal rules, all 10 test teams</th><td class="num">+0.24 points</td><td>Nothing to win</td></tr>
+            <tr><th scope="row">No Wait, all 10 test teams, two seeds</th><td class="num">+0.3 points</td><td>Defensive-trained agents win or tie everywhere</td></tr>
+            <tr><th scope="row">Hidden hands, all 10 test teams</th><td class="num">+1.0 points</td><td>Luck alone gives about +0.7</td></tr>
+            <tr><th scope="row">HP carried over a 6-fight route, no retraining</th><td class="num">+3 win pts</td><td>The general agent still clears more: 73% against 70%</td></tr>
+            <tr><th scope="row">Low starting HP, no retraining</th><td class="num">at most +3 win pts</td><td>At any HP level</td></tr>
+            <tr><th scope="row">Low starting HP, retrained</th><td class="num">at most +0.9 win pts</td><td>At any HP level</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="open">
+      <span class="chip">Still open</span>
+      <p><strong>Boss fights with hidden hands.</strong> On boss fights alone, each hidden-hands specialist beats the other next to its own teammate type: aggressive by +3.1 ± 1.7, defensive by +6.2 ± 2.3. This is the first setting to clear our bar of about 2 points each way. It rests on one training seed, and the same measure under No Wait moved 5.4 points between seeds, so it needs a second seed before it counts.</p>
+    </div>
+        <h3>Training at low HP</h3>
+            <p>The real game carries HP between fights, so we trained a general agent and two specialists with each player's HP drawn per fight from 100, 75, 50, 25 or 10%. We then tested them against agents trained at full HP.</p>
+    <div class="panel">
+      <h3>Win rate by starting HP, with all three players starting at the same level</h3>
+      <div class="legend" id="legend-lines"></div>
+      <div class="panels" id="chart-win"></div>
+      <details>
+        <summary>Show the numbers</summary>
+        <div class="scroll"><table id="table-win"></table></div>
+      </details>
+    </div>
+    <p class="note">400 fights per point, about ±5 points in the middle of the range. Everyone at 25% or below is nearly always a loss. The low-HP agent is level next to aggressive teammates and behind next to defensive ones, by 17 points at 50% HP.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <caption>Win rate in the HP mix the low-HP agents trained on (%), next to aggressive / next to defensive teammates. 1,000 fights per cell; each comparison is good to about ±4 points, with one training seed per agent.</caption>
+          <thead><tr><th scope="col">Agent</th><th scope="col" class="num">Trained at full HP</th><th scope="col" class="num">Trained at low HP</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">General agent</th><td class="num">45 / 41</td><td class="num">40 / 36</td></tr>
+            <tr><th scope="row">Aggressive specialist</th><td class="num">46 / 40</td><td class="num">44 / 37</td></tr>
+            <tr><th scope="row">Defensive specialist</th><td class="num">42 / 43</td><td class="num">43 / 37</td></tr>
+            <tr><th scope="row">Cheese bot (scripted)</th><td class="num">32 / 22</td><td class="num">not trained</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+        <h3>Who older agents protected</h3>
+            <p>Lift and Intercept are the cards that protect one chosen teammate. When both teammates are alive at different HP, trained agents play them on the lower one about half the time, close to the Cheese bot. A simple scripted bodyguard does so 71 to 84% of the time, so there is a real choice to make.</p>
+    <div class="panel">
+      <h3>Share of Lift and Intercept plays that go to the lower-HP teammate, %</h3>
+      <div class="legend" id="legend-block"></div>
+      <div class="dp" id="chart-block" role="group" aria-label="Share of teammate Block going to the lower-HP teammate, by agent"></div>
+      <details>
+        <summary>Show the numbers</summary>
+        <div class="scroll"><table id="table-block"></table></div>
+      </details>
+    </div>
+    <p class="note">Tested in the training HP mix, 400 fights per agent and team, margins about ±3 to ±6 points. The bodyguard script waits for teammates, covers whoever is most at risk, then plays like the Cheese bot. It wins less than trained agents, so it keeps no more teammates alive overall: both survive 88% / 70% of its full-HP fights (next to aggressive / defensive), against 96% / 81% for the general agent. Most teammate deaths come from lost fights: at full HP, both teammates survive 87 to 97% of trained agents' wins, and in the low-HP mix 50 to 60%.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="limits">
+    <h2>What limits these results</h2>
+    <ul>
+      <li><strong>All teammates are scripted bots.</strong> We have no real-player data. The bots don't react to the agent or to their own HP, and they never wait back unless a test makes them.</li>
+      <li><strong>The scripted teammates favour the agent.</strong> When a bot's choices tie, it takes the first seat, which is the agent. So they aim almost all their Believe in You at it (about 20% extra energy) and 85–93% of their Lift and Intercept. Breaking those ties at random costs the two 1M agents 1.7 and 2.5 points of low-HP win and almost nothing at full HP, so the results above hold up but are slightly flattered. The agents were still trained next to the old bots, and we haven't re-measured damage shares or the old network with fairer bots.</li>
+      <li><strong>Two training seeds per agent,</strong> and the margins count fight luck only. Seeds still differ: one 1M seed holds back 39% of its cards until teammates finish, and the other 14%. An agent's strength also swings between training updates, and we haven't measured how much.</li>
+      <li><strong>True against swapped compares right information with wrong information.</strong> No pair agent has been trained without profiles, so we can't say how much the profile helps compared with having none.</li>
+      <li><strong>One fixed deck, elite and boss fights only, one fight at a time.</strong> Low starting HP stands in for HP carried through a run.</li>
+      <li><strong>The collaboration bonus is off on every result above.</strong> It has only been tried on older random decks and the old network.</li>
+      <li><strong>One card is still blank in the agent's input.</strong> Believe in You has no number for the energy it gives.</li>
+    </ul>
+  </section>
+
+  <section id="options">
+    <h2>Decision for the team</h2>
+    <p>The planned week-long sweep stays on hold, because it was built to tune score. The options are in the order we suggest. The first two come first because comfort is our goal and everything so far is simulated.</p>
+    <ol class="options">
+      <li><div><strong>Agree what success means.</strong><p>Accept or change the five feelings above, decide how we will measure them, and decide how much score we will give up for them. For example, the agent could be required to stay above the scripted Cheese bot, which it now clears easily.</p></div></li>
+      <li><div><strong>Plan real games.</strong><p>Playing with real people is the only direct test of comfort, and the logs would let us calibrate the bots. A terminal playtest is ready now: a person plays next to the agent without knowing which version it is, rates each fight, and can run it with <code>python playtest.py --name Sam</code>. It can't show how waiting feels in real time. Full games need the agent connected to the live game, which isn't built yet, and a decision on how long it should wait for a real player. All of this depends on people's time.</p></div></li>
+      <li><div><strong>Decide whether the live agent uses the timing rule.</strong><p>It removes about 90 to 95% of the wasted Lift and Intercept plays on every team and HP level tested. The one measured cost is very small: at full HP the best agent lost 7 of 4,000 fights instead of 1. Real games would show whether players notice the difference.</p></div></li>
+      <li><div><strong>Train a pair agent without profiles.</strong><p>This shows how much the profile helps compared with having none, which true against swapped can't show. About two hours of training for two seeds, with the bots' tie-break fixed first, as any new training should have.</p></div></li>
+      <li><div><strong>Try the collaboration bonus on the pair network.</strong><p>Judge it on the agreed measure, with its weights measured on this deck first. A few hours of training.</p></div></li>
+      <li><div><strong>Settle the open hidden-hands result.</strong><p>It came before the card fix, so it now needs both specialists retrained. This matters less if score stops being the main measure.</p></div></li>
+    </ol>
+  </section>
+
+  <footer>Results since the card fix cover about 350,000 simulated fights, from 5 to 7 November 2026. Earlier numbers come from runs between 3 and 5 November 2026.</footer>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var GROUPS = {
+    full: { name: 'Trained at full HP', c: 'var(--s-full)', shape: 'circle' },
+    low: { name: 'Trained at low HP', c: 'var(--s-low)', shape: 'square' },
+    cheese: { name: 'Cheese bot (scripted)', c: 'var(--s-cheese)', shape: 'diamond' }
+  };
+  var SVG = 'http://www.w3.org/2000/svg';
+
+  function h(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function sv(tag, attrs, parent) {
+    var e = document.createElementNS(SVG, tag);
+    Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function signed(v, d) { return (v < 0 ? '−' : v > 0 ? '+' : '') + Math.abs(v).toFixed(d); }
+
+  // ---- tooltip: one element, values lead, labels follow
+  var tip = document.getElementById('tip');
+  function showTip(rows, x, y) {
+    tip.replaceChildren();
+    rows.forEach(function (r) {
+      var row = h('div', r.v ? 'tip-row' : 'tip-row tip-sub');
+      if (r.c) { var key = h('span', 'tip-key'); key.style.background = r.c; row.appendChild(key); }
+      if (r.v) row.appendChild(h('strong', '', r.v));
+      row.appendChild(h('span', r.v ? 'tip-sub' : '', r.l));
+      tip.appendChild(row);
+    });
+    tip.hidden = false;
+    var w = tip.offsetWidth, ht = tip.offsetHeight, vw = document.documentElement.clientWidth;
+    tip.style.left = Math.max(8, Math.min(x + 14, vw - w - 8)) + 'px';
+    tip.style.top = (y - ht - 12 < 8 ? y + 18 : y - ht - 12) + 'px';
+  }
+  function hideTip() { tip.hidden = true; }
+
+  // ---- marks in legends
+  function keySvg(group, line, hollow) {
+    var g = GROUPS[group], color = g ? g.c : 'var(--ink-2)', shape = g ? g.shape : 'circle';
+    var s = sv('svg', { width: line ? 26 : 14, height: 14, viewBox: (line ? '0 0 26 14' : '0 0 14 14'), 'aria-hidden': 'true' });
+    var cx = line ? 13 : 7;
+    if (line) sv('line', { x1: 1, x2: 25, y1: 7, y2: 7, style: 'stroke:' + color + ';stroke-width:2;stroke-linecap:round' }, s);
+    drawMark(s, shape, cx, 7, color, hollow);
+    return s;
+  }
+  function drawMark(parent, shape, x, y, color, hollow) {
+    var style = hollow ? 'fill:var(--panel);stroke:' + color + ';stroke-width:2'
+      : 'fill:' + color + ';stroke:var(--panel);stroke-width:2;paint-order:stroke';
+    if (shape === 'square') return sv('rect', { x: x - 4.5, y: y - 4.5, width: 9, height: 9, rx: 1.5, style: style }, parent);
+    if (shape === 'diamond') return sv('polygon', { points: [x, y - 6, x + 6, y, x, y + 6, x - 6, y].join(' '), style: style }, parent);
+    return sv('circle', { cx: x, cy: y, r: 4.5, style: style }, parent);
+  }
+  function legend(id, items) {
+    var box = document.getElementById(id);
+    items.forEach(function (it) {
+      var s = h('span');
+      s.appendChild(keySvg(it.g, it.line, it.hollow));
+      s.appendChild(document.createTextNode(it.label));
+      box.appendChild(s);
+    });
+  }
+
+  // ---- dot plot, positions in percent of one shared scale
+  function dotPlot(id, o) {
+    var box = document.getElementById(id);
+    var pct = function (v) { return ((v - o.min) / (o.max - o.min) * 100) + '%'; };
+    if (o.valueHead) {
+      var ch = h('div', 'dp-row dp-colrow');
+      ch.appendChild(h('div', 'dp-label')); ch.appendChild(h('div', 'dp-plot')); ch.lastChild.style.minHeight = '0';
+      ch.appendChild(h('div', 'dp-col', o.valueHead));
+      box.appendChild(ch);
+    }
+    o.rows.forEach(function (r) {
+      if (r.head) { box.appendChild(h('div', 'dp-head', r.head)); return; }
+      var row = h('div', 'dp-row');
+      row.tabIndex = 0;
+      row.setAttribute('aria-label', r.label + (r.note ? ', ' + r.note : '') + ': ' + r.value);
+      var lab = h('div', 'dp-label', r.label);
+      if (r.note) lab.appendChild(h('small', '', r.note));
+      row.appendChild(lab);
+      var plot = h('div', 'dp-plot');
+      o.ticks.forEach(function (t) {
+        var g = h('span', t === o.ref ? 'zero' : 'gl');
+        g.style.left = pct(t);
+        plot.appendChild(g);
+      });
+      if (r.whisk) {
+        var w = h('span', 'whisker');
+        w.style.left = pct(r.whisk[0]);
+        w.style.width = ((r.whisk[1] - r.whisk[0]) / (o.max - o.min) * 100) + '%';
+        w.style.setProperty('--c', GROUPS[r.g].c);
+        plot.appendChild(w);
+      }
+      r.marks.forEach(function (m) {
+        var d = h('span', 'mark ' + GROUPS[r.g].shape + (m.hollow ? ' hollow' : ''));
+        d.style.left = pct(m.v);
+        d.style.setProperty('--c', GROUPS[r.g].c);
+        plot.appendChild(d);
+      });
+      row.appendChild(plot);
+      row.appendChild(h('div', 'dp-value', r.value));
+      row.addEventListener('pointermove', function (e) { showTip(r.tip, e.clientX, e.clientY); });
+      row.addEventListener('pointerleave', hideTip);
+      row.addEventListener('focus', function () { var b = row.getBoundingClientRect(); showTip(r.tip, b.left + b.width / 2, b.top); });
+      row.addEventListener('blur', hideTip);
+      box.appendChild(row);
+    });
+    var ax = h('div', 'dp-row dp-axis');
+    ax.appendChild(h('div', 'dp-label'));
+    var axp = h('div', 'dp-plot');
+    o.ticks.forEach(function (t) {
+      var l = h('span', 'tick', o.tickText(t));
+      l.style.left = pct(t);
+      axp.appendChild(l);
+    });
+    ax.appendChild(axp);
+    ax.appendChild(h('div', 'dp-value'));
+    box.appendChild(ax);
+    if (o.dirLeft) {
+      var dr = h('div', 'dp-row dp-axis');
+      dr.style.borderTop = '0';
+      dr.appendChild(h('div', 'dp-label'));
+      var dp = h('div', 'dp-plot dir');
+      dp.style.minHeight = '0';
+      dp.appendChild(h('span', '', o.dirLeft));
+      dp.appendChild(h('span', '', o.dirRight));
+      dr.appendChild(dp);
+      dr.appendChild(h('div', 'dp-value'));
+      box.appendChild(dr);
+    }
+  }
+
+  // ---- new charts: the agents since the card fix
+  GROUPS.pair = { name: 'Pair network', c: 'var(--s-pair)', shape: 'square' };
+
+  var LADDER_LOW = [
+    { label: 'Cheese bot', g: 'cheese', win: 45.9, both: 30.9 },
+    { label: 'Bodyguard script', g: 'cheese', win: 56.8, both: 43.0 },
+    { label: 'Old network', note: 'two seeds', g: 'full', win: 66.0, both: 47.1 },
+    { label: 'Pair network, old reward', note: 'two seeds, 500k steps', g: 'pair', win: 74.7, both: 55.0 },
+    { label: 'Pair network, survival reward', note: 'two seeds, 500k steps', g: 'pair', win: 78.8, both: 58.2 },
+    { label: 'Survival reward, 1M steps', note: 'seed 0', g: 'pair', win: 79.7, both: 59.5 },
+    { label: 'Survival reward, 1M steps', note: 'seed 1, best so far', g: 'pair', win: 82.0, both: 61.5 }
+  ];
+  var LADDER_FULL = [
+    { label: 'Cheese bot', g: 'cheese', win: 74.0, both: 65.2 },
+    { label: 'Bodyguard script', g: 'cheese', win: 85.0, both: 78.2 },
+    { label: 'Old network', note: 'two seeds', g: 'full', win: 91.5, both: 85.0 },
+    { label: 'Pair network, old reward', note: 'two seeds, 500k steps', g: 'pair', win: 96.7, both: 92.5 },
+    { label: 'Pair network, survival reward', note: 'two seeds, 500k steps', g: 'pair', win: 98.9, both: 95.8 },
+    { label: 'Survival reward, 1M steps', note: 'seed 0', g: 'pair', win: 98.4, both: 94.8 },
+    { label: 'Survival reward, 1M steps', note: 'seed 1, best so far', g: 'pair', win: 100.0, both: 97.9 }
+  ];
+  function ladderRow(r) {
+    return {
+      label: r.label, note: r.note, g: r.g, marks: [{ v: r.both, hollow: true }, { v: r.win }],
+      value: r.win.toFixed(1) + ' / ' + r.both.toFixed(1),
+      tip: [{ v: r.win.toFixed(1) + '%', l: 'win' }, { v: r.both.toFixed(1) + '%', l: 'both teammates alive' }, { l: r.label + (r.note ? ', ' + r.note : '') }]
+    };
+  }
+  legend('legend-ladder', [
+    { g: 'cheese', label: 'Scripted bot' }, { g: 'full', label: 'Old network' }, { g: 'pair', label: 'Pair network' },
+    { label: 'Filled: win' }, { hollow: true, label: 'Hollow: both teammates alive' }
+  ]);
+  dotPlot('chart-ladder', {
+    min: 20, max: 100, ticks: [20, 40, 60, 80, 100], valueHead: 'Win / both alive',
+    tickText: function (t) { return t + '%'; },
+    rows: [{ head: 'Low HP: players start at 25 to 100%' }].concat(LADDER_LOW.map(ladderRow), [{ head: 'Full HP' }], LADDER_FULL.map(ladderRow))
+  });
+
+  var FOLLOW = [
+    { head: 'Old network, 500k steps' },
+    { label: 'Old reward', note: 'seed 0', g: 'full', t: 48.5, s: 50.2 },
+    { label: 'Old reward', note: 'seed 1', g: 'full', t: 49.7, s: 50.3 },
+    { head: 'Pair network, 500k steps' },
+    { label: 'Old reward', note: 'seed 0', g: 'pair', t: 73.8, s: 79.7 },
+    { label: 'Old reward', note: 'seed 1', g: 'pair', t: 88.2, s: 92.1 },
+    { label: 'Survival reward', note: 'seed 0', g: 'pair', t: 79.5, s: 86.4 },
+    { label: 'Survival reward', note: 'seed 1', g: 'pair', t: 87.9, s: 93.0 },
+    { head: 'Pair network, survival reward, 1M steps, new fights' },
+    { label: 'Seed 0', g: 'pair', t: 87.3, s: 89.8 },
+    { label: 'Seed 1, best so far', g: 'pair', t: 82.4, s: 90.1 }
+  ];
+  legend('legend-follow', [
+    { g: 'full', label: 'Old network' }, { g: 'pair', label: 'Pair network' },
+    { label: 'Filled: true profiles' }, { hollow: true, label: 'Hollow: swapped profiles' }
+  ]);
+  dotPlot('chart-follow', {
+    min: 40, max: 100, ticks: [40, 50, 60, 70, 80, 90, 100], ref: 50, valueHead: 'True / swapped',
+    tickText: function (t) { return t + '%'; },
+    dirLeft: '← to the teammate shown as defensive', dirRight: 'to the teammate shown as aggressive →',
+    rows: FOLLOW.map(function (r) {
+      if (r.head) return r;
+      return {
+        label: r.label, note: r.note, g: r.g, marks: [{ v: r.s, hollow: true }, { v: r.t }],
+        value: r.t.toFixed(1) + ' / ' + r.s.toFixed(1),
+        tip: [{ v: r.t.toFixed(1) + '%', l: 'true profiles' }, { v: r.s.toFixed(1) + '%', l: 'swapped profiles' }, { l: GROUPS[r.g].name + ', ' + r.label + (r.note ? ', ' + r.note : '') }]
+      };
+    })
+  });
+
+  // ---- chart 1: advantage point
+  var ADV = [
+    { head: 'Reward bonus on, older random decks and mostly hallway fights, 1M training steps' },
+    { label: 'Baseline scoring', note: '3,600 fights per side', v: -1.5, m: 1.1, d: 1, g: 'full' },
+    { label: 'Scoring variant 2', note: '3,600 fights per side', v: -1.8, m: 1.1, d: 1, g: 'full' },
+    { label: 'Scoring variant 3', note: '3,600 fights per side', v: -0.4, m: 1.1, d: 1, g: 'full' },
+    { label: 'Scoring variant 4', note: '3,600 fights per side', v: -0.8, m: 1.1, d: 1, g: 'full' },
+    { label: 'Variant 4, unseen blended teammates', note: '4,000 fights per side', v: 0.27, m: 0.72, d: 2, g: 'full' },
+    { head: 'Bonus off, 24-card deck, 500k training steps' },
+    { label: 'Normal rules', note: 'six agents pooled', v: -0.10, m: 0.28, d: 2, g: 'full' },
+    { label: 'No Wait', note: 'two agents pooled', v: -0.08, m: 0.59, d: 2, g: 'full' },
+    { head: 'One aggressive and one defensive teammate, at varied starting HP' },
+    { label: 'General agent', note: 'trained at full HP, 8,000 fights per side', v: 0.54, m: 1.12, d: 2, g: 'full' },
+    { label: 'General agent', note: 'trained at low HP, 8,000 fights per side', v: -0.12, m: 1.19, d: 2, g: 'low' },
+    { label: 'Aggressive specialist', note: 'trained at low HP, 8,000 fights per side', v: -0.40, m: 1.16, d: 2, g: 'low' },
+    { label: 'Defensive specialist', note: 'trained at low HP, 8,000 fights per side', v: 0.11, m: 1.17, d: 2, g: 'low' }
+  ];
+  legend('legend-adv', [{ g: 'full', label: GROUPS.full.name }, { g: 'low', label: GROUPS.low.name }]);
+  dotPlot('chart-adv', {
+    min: -3, max: 3, ticks: [-3, -2, -1, 0, 1, 2, 3], ref: 0, valueHead: 'Points ± margin',
+    tickText: function (t) { return t === 0 ? '0' : signed(t, 0); },
+    dirLeft: '← wrong profile higher', dirRight: 'true profile higher →',
+    rows: ADV.map(function (r) {
+      if (r.head) return r;
+      return {
+        label: r.label, note: r.note, g: r.g, marks: [{ v: r.v }], whisk: [r.v - r.m, r.v + r.m],
+        value: signed(r.v, r.d) + ' ± ' + r.m.toFixed(r.d),
+        tip: [{ v: signed(r.v, r.d) + ' points', l: r.label }, { l: GROUPS[r.g].name }, { l: 'Margin runs ' + signed(r.v - r.m, r.d) + ' to ' + signed(r.v + r.m, r.d) }]
+      };
+    })
+  });
+
+  // ---- chart 2: win rate by starting HP
+  var LEVELS = [100, 75, 50, 25, 10];
+  var WIN = [
+    { title: 'Next to two aggressive teammates', cheese: [81.8, 64.2, 45.5, 8.5, 0.5], full: [98.8, 89.0, 56.8, 15.0, 2.0], low: [98.8, 84.8, 60.8, 15.5, 2.5] },
+    { title: 'Next to two defensive teammates', cheese: [65.0, 50.0, 26.5, 4.2, 0.0], full: [89.0, 81.5, 62.7, 23.0, 3.2], low: [83.0, 67.2, 45.8, 18.2, 1.2] }
+  ];
+  var LINE_NAME = { full: 'General agent, trained at full HP', low: 'General agent, trained at low HP', cheese: 'Cheese bot (scripted)' };
+  var ORDER = ['cheese', 'full', 'low'];
+  legend('legend-lines', ORDER.map(function (g) { return { g: g, line: true, label: LINE_NAME[g] }; }));
+
+  function lineChart(host, data) {
+    var wrap = h('div', 'lc');
+    wrap.appendChild(h('div', 'note', data.title));
+    var plot = h('div', 'lc-plot');
+    plot.tabIndex = 0;
+    plot.setAttribute('role', 'img');
+    plot.setAttribute('aria-label', 'Win rate by starting HP, ' + data.title.toLowerCase() + '. The numbers are in the table below.');
+    wrap.appendChild(plot);
+    host.appendChild(wrap);
+    var lastW = 0, cross, X, Y, M;
+
+    function readout(i, cx, cy) {
+      cross.setAttribute('x1', X(LEVELS[i])); cross.setAttribute('x2', X(LEVELS[i]));
+      cross.style.display = '';
+      var rows = ORDER.slice().sort(function (a, b) { return data[b][i] - data[a][i]; }).map(function (g) {
+        return { v: data[g][i].toFixed(1) + '%', l: LINE_NAME[g], c: GROUPS[g].c };
+      });
+      rows.unshift({ l: 'Everyone starts at ' + LEVELS[i] + '% HP' });
+      showTip(rows, cx, cy);
+    }
+    function nearest(px) {
+      var best = 0;
+      LEVELS.forEach(function (l, i) { if (Math.abs(X(l) - px) < Math.abs(X(LEVELS[best]) - px)) best = i; });
+      return best;
+    }
+    function hide() { if (cross) cross.style.display = 'none'; hideTip(); }
+
+    function draw() {
+      var W = plot.clientWidth;
+      if (!W || W === lastW) return;
+      lastW = W;
+      var H = Math.max(210, Math.min(270, Math.round(W * .62)));
+      M = { l: 34, r: 14, t: 10, b: 28 };
+      X = function (hp) { return M.l + (100 - hp) / 90 * (W - M.l - M.r); };
+      Y = function (v) { return M.t + (100 - v) / 100 * (H - M.t - M.b); };
+      plot.replaceChildren();
+      var s = sv('svg', { width: '100%', viewBox: '0 0 ' + W + ' ' + H }, plot);
+      [0, 25, 50, 75, 100].forEach(function (t) {
+        sv('line', { x1: M.l, x2: W - M.r, y1: Y(t), y2: Y(t), style: 'stroke:' + (t === 0 ? 'var(--axis)' : 'var(--line)') + ';stroke-width:1' }, s);
+        var tx = sv('text', { x: M.l - 8, y: Y(t) + 4, 'text-anchor': 'end' }, s);
+        tx.textContent = t;
+      });
+      LEVELS.forEach(function (l) {
+        var tx = sv('text', { x: X(l), y: H - 8, 'text-anchor': l === 100 ? 'start' : 'middle' }, s);
+        tx.textContent = l + '%';
+      });
+      cross = sv('line', { y1: M.t, y2: H - M.b, x1: 0, x2: 0, style: 'stroke:var(--muted);stroke-width:1;display:none' }, s);
+      ORDER.forEach(function (g) {
+        var pts = LEVELS.map(function (l, i) { return X(l) + ',' + Y(data[g][i]); }).join(' ');
+        sv('polyline', { points: pts, style: 'fill:none;stroke:' + GROUPS[g].c + ';stroke-width:2;stroke-linejoin:round;stroke-linecap:round' }, s);
+      });
+      ORDER.forEach(function (g) {
+        LEVELS.forEach(function (l, i) { drawMark(s, GROUPS[g].shape, X(l), Y(data[g][i]), GROUPS[g].c, false); });
+      });
+    }
+    plot.addEventListener('pointermove', function (e) {
+      var b = plot.getBoundingClientRect();
+      readout(nearest(e.clientX - b.left), e.clientX, e.clientY);
+    });
+    plot.addEventListener('pointerleave', hide);
+    var focusIndex = 2;
+    function focusShow() {
+      var b = plot.getBoundingClientRect();
+      readout(focusIndex, b.left + X(LEVELS[focusIndex]), b.top + 10);
+    }
+    plot.addEventListener('focus', focusShow);
+    plot.addEventListener('blur', hide);
+    plot.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        focusIndex = Math.max(0, Math.min(LEVELS.length - 1, focusIndex + (e.key === 'ArrowRight' ? 1 : -1)));
+        focusShow();
+      }
+    });
+    draw();
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(plot);
+    else window.addEventListener('resize', draw);
+  }
+  var winHost = document.getElementById('chart-win');
+  WIN.forEach(function (d) { lineChart(winHost, d); });
+
+  function fillTable(id, head, rows) {
+    var t = document.getElementById(id);
+    var th = t.createTHead().insertRow();
+    head.forEach(function (c, i) {
+      var cell = h('th', i ? 'num' : '', c);
+      cell.scope = 'col';
+      th.appendChild(cell);
+    });
+    var body = t.createTBody();
+    rows.forEach(function (r) {
+      var tr = body.insertRow();
+      r.forEach(function (c, i) {
+        var cell = h(i ? 'td' : 'th', i ? 'num' : '', c);
+        if (!i) cell.scope = 'row';
+        tr.appendChild(cell);
+      });
+    });
+  }
+  fillTable('table-win',
+    ['Starting HP', 'Aggr: Cheese', 'Aggr: full HP', 'Aggr: low HP', 'Def: Cheese', 'Def: full HP', 'Def: low HP'],
+    LEVELS.map(function (l, i) {
+      return [l + '%'].concat(WIN[0].cheese[i].toFixed(1), WIN[0].full[i].toFixed(1), WIN[0].low[i].toFixed(1),
+        WIN[1].cheese[i].toFixed(1), WIN[1].full[i].toFixed(1), WIN[1].low[i].toFixed(1));
+    }));
+
+  // ---- chart 3: who gets the Block
+  var BLOCK = [
+    { head: 'Scripted' },
+    { label: 'Cheese bot', g: 'cheese', a: [42.7, 314, 5.5], d: [46.1, 427, 4.7] },
+    { label: 'Bodyguard script', g: 'cheese', a: [83.6, 554, 3.1], d: [70.5, 607, 3.6] },
+    { head: GROUPS.full.name },
+    { label: 'Defensive specialist', g: 'full', a: [52.0, 252, 6.2], d: [50.3, 376, 5.1] },
+    { label: 'General agent', g: 'full', a: [52.2, 439, 4.7], d: [46.0, 556, 4.1] },
+    { head: GROUPS.low.name },
+    { label: 'General agent', g: 'low', a: [53.6, 563, 4.1], d: [48.7, 866, 3.3] }
+  ];
+  legend('legend-block', [
+    { label: 'Filled: next to aggressive teammates' },
+    { hollow: true, label: 'Hollow: next to defensive teammates' }
+  ]);
+  dotPlot('chart-block', {
+    min: 30, max: 90, ticks: [30, 40, 50, 60, 70, 80, 90], ref: 50, valueHead: 'Aggr / Def',
+    tickText: function (t) { return t + '%'; },
+    dirLeft: '← favours healthier teammate', dirRight: 'favours weaker teammate →',
+    rows: BLOCK.map(function (r) {
+      if (r.head) return r;
+      return {
+        label: r.label, g: r.g, marks: [{ v: r.d[0], hollow: true }, { v: r.a[0] }],
+        value: r.a[0].toFixed(1) + ' / ' + r.d[0].toFixed(1),
+        tip: [{ v: r.a[0].toFixed(1) + '%', l: 'next to aggressive' }, { v: r.d[0].toFixed(1) + '%', l: 'next to defensive' }, { l: r.g === 'cheese' ? r.label + ' (scripted)' : r.label + ', ' + GROUPS[r.g].name }]
+      };
+    })
+  });
+  var blockRows = [], section = '';
+  BLOCK.forEach(function (r) {
+    if (r.head) { section = r.head; return; }
+    blockRows.push([r.label + ' (' + section.toLowerCase() + ')',
+      r.a[0].toFixed(1) + ' ±' + r.a[2].toFixed(1), String(r.a[1]),
+      r.d[0].toFixed(1) + ' ±' + r.d[2].toFixed(1), String(r.d[1])]);
+  });
+  fillTable('table-block', ['Agent', 'Aggr: share %', 'Aggr: choices', 'Def: share %', 'Def: choices'], blockRows);
+})();
+</script>
+</html>

@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Co-op Playtest</title>
+<style>
+:root {
+  --bg: #e9ece8; --panel: #fbfbf7; --sunk: #f1f3ee; --ink: #1c2320; --muted: #5a6761; --line: #d3d9d3;
+  --accent: #1c6b58; --on-accent: #ffffff; --accent-soft: #d8ebe4;
+  --danger: #b1342a; --danger-soft: #f6e0dc; --safe: #2a7648; --safe-soft: #dfefe4;
+  --block: #2a659f; --energy: #a96f12; --bar: #3c8a62; --bar-low: #c8552f; --bar-back: #dde2dc;
+  --attack: #bf4a30; --skill: #2f6cab; --power: #9d6a13; --other: #69737b;
+  --new: #fbf1cf; --shadow: 0 1px 2px rgba(20, 30, 25, .12);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121715; --panel: #1c2421; --sunk: #161d1a; --ink: #e8ede9; --muted: #9dabA4; --line: #33403a;
+  --accent: #52c4a6; --on-accent: #0a1512; --accent-soft: #1e3b33;
+  --danger: #f08072; --danger-soft: #3f2320; --safe: #68c78e; --safe-soft: #1d3527;
+  --block: #79aee8; --energy: #e6b65a; --bar: #52a97e; --bar-low: #e0754f; --bar-back: #2c3733;
+  --attack: #e8826a; --skill: #79aee8; --power: #e6b65a; --other: #a0a9b2;
+  --new: #3a3518; --shadow: 0 1px 2px rgba(0, 0, 0, .5); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #121715; --panel: #1c2421; --sunk: #161d1a; --ink: #e8ede9; --muted: #9dabA4; --line: #33403a;
+  --accent: #52c4a6; --on-accent: #0a1512; --accent-soft: #1e3b33;
+  --danger: #f08072; --danger-soft: #3f2320; --safe: #68c78e; --safe-soft: #1d3527;
+  --block: #79aee8; --energy: #e6b65a; --bar: #52a97e; --bar-low: #e0754f; --bar-back: #2c3733;
+  --attack: #e8826a; --skill: #79aee8; --power: #e6b65a; --other: #a0a9b2;
+  --new: #3a3518; --shadow: 0 1px 2px rgba(0, 0, 0, .5); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.4 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+kbd { font: 600 11px/1 ui-monospace, Consolas, monospace; padding: 2px 5px; border: 1px solid currentColor; border-radius: 4px; opacity: .65; }
+#app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+
+header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; z-index: 30; }
+#where { font-weight: 650; font-size: 15px; }
+#where span { color: var(--muted); font-weight: 500; margin-left: 8px; }
+header nav { margin-left: auto; display: flex; gap: 6px; }
+.quiet { background: none; border: 1px solid var(--line); border-radius: 7px; padding: 4px 11px; color: var(--muted); }
+.quiet:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+.quiet:disabled { opacity: .45; }
+
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 22vw); min-height: 0; }
+#board { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; min-height: 0; overflow: auto; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.row > * { flex: 1 1 220px; min-width: 0; }
+.unit { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; box-shadow: var(--shadow); text-align: left; position: relative; display: block; width: 100%; }
+.unit.gone { opacity: .5; }
+.unit.you { border-color: var(--accent); border-width: 2px; padding: 8px 11px; }
+.unit.aim { outline: 3px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); cursor: pointer; }
+.unit.aim:hover { outline-width: 4px; }
+.top { display: flex; align-items: baseline; gap: 8px; }
+.name { font-weight: 650; font-size: 15px; }
+.tag { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.letter { position: absolute; right: 8px; top: 8px; }
+.hp { display: flex; align-items: center; gap: 8px; margin: 5px 0 4px; }
+.track { flex: 1; height: 9px; background: var(--bar-back); border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; background: var(--bar); border-radius: 5px; }
+.fill.low { background: var(--bar-low); }
+.hpnum { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.delta { font-weight: 700; font-size: 13px; margin-left: 2px; }
+.delta.down { color: var(--danger); }
+.delta.up { color: var(--safe); }
+.line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.blockv { color: var(--block); font-weight: 650; }
+.pips { display: inline-flex; gap: 3px; vertical-align: -1px; margin-left: 3px; }
+.pip { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--energy); }
+.pip.on { background: var(--energy); }
+.danger { font-weight: 650; padding: 1px 8px; border-radius: 10px; font-size: 13px; }
+.danger.bad { color: var(--danger); background: var(--danger-soft); }
+.danger.fine { color: var(--safe); background: var(--safe-soft); }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+.chip { font-size: 12px; padding: 0 6px; border-radius: 5px; background: var(--sunk); border: 1px solid var(--line); color: var(--muted); }
+.minis { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.minis .label { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.mini { display: grid; grid-template-columns: 1.1em auto minmax(0, 1fr); align-items: baseline; gap: 2px 7px; font-size: 12.5px; line-height: 1.3;
+  padding: 3px 7px 3px 6px; border-radius: 5px; background: var(--sunk); border-left: 3px solid var(--tone, var(--other)); }
+.mini.attack { --tone: var(--attack); } .mini.skill { --tone: var(--skill); } .mini.power { --tone: var(--power); }
+.mcost { font-weight: 750; color: var(--energy); font-variant-numeric: tabular-nums; text-align: center; }
+.mname { font-weight: 650; white-space: nowrap; }
+.mtext { color: var(--muted); }
+.next { margin-top: 5px; font-size: 14px; color: var(--muted); }
+.next.hit { color: var(--danger); font-weight: 600; }
+.warn { margin-top: 5px; padding: 3px 8px; border-radius: 6px; background: var(--danger-soft); color: var(--danger); font-weight: 650; font-size: 13px; }
+.cwarn { margin-top: 3px; font-size: 11.5px; font-weight: 650; color: var(--danger); }
+
+aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+aside h2 { margin: 0; padding: 9px 14px; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
+#feed { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 10px; font-size: 13px; }
+#feed div { padding: 2px 6px; border-radius: 4px; }
+#feed .new { background: var(--new); }
+#feed .round { margin-top: 8px; font-weight: 650; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; border-radius: 0; }
+#feed .fight { margin-top: 8px; font-weight: 700; }
+#feed .enemy { color: var(--danger); font-weight: 600; }
+
+#tray { background: var(--panel); border-top: 1px solid var(--line); padding: 8px 16px 12px; position: relative; }
+#bar { display: flex; align-items: center; gap: 10px; min-height: 36px; margin-bottom: 8px; }
+#hint { flex: 1; min-width: 0; font-weight: 550; }
+#hint.aiming { color: var(--accent); }
+.act { border-radius: 8px; padding: 6px 14px; font-weight: 600; border: 1px solid var(--line); background: var(--sunk); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.act:hover:not(:disabled) { border-color: var(--accent); }
+.act.main { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.act:disabled { opacity: .45; }
+#hand { display: flex; gap: 8px; flex-wrap: wrap; }
+.card { flex: 0 1 158px; min-width: 128px; min-height: 124px; text-align: left; padding: 7px 9px 6px 12px; border-radius: 9px; background: var(--sunk); border: 1px solid var(--line); box-shadow: var(--shadow); position: relative; display: flex; flex-direction: column; overflow: hidden; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--tone); }
+.card.attack { --tone: var(--attack); } .card.skill { --tone: var(--skill); } .card.power { --tone: var(--power); }
+.card.status, .card.curse { --tone: var(--other); }
+.card:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
+.card:disabled { opacity: .5; }
+.card.picked { outline: 3px solid var(--accent); outline-offset: 1px; }
+.card .head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.cost { min-width: 21px; height: 21px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--energy); color: var(--panel); font-weight: 750; font-size: 12px; padding: 0 3px; }
+.cname { font-weight: 650; line-height: 1.15; }
+.ctext { font-size: 12.5px; line-height: 1.3; flex: 1; }
+.cfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 11px; color: var(--muted); text-transform: capitalize; }
+
+#over { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 78%, transparent); }
+#app { position: relative; }
+#over[hidden] { display: none; }
+#box { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 20px 24px; width: min(560px, 100%); max-height: 88vh; overflow: auto; box-shadow: 0 12px 34px rgba(10, 20, 15, .28); }
+#box .note { color: var(--muted); margin: 0 0 12px; white-space: pre-line; }
+#box .ask { font-size: 17px; font-weight: 620; margin: 0 0 14px; text-wrap: balance; }
+#box .help p, #box .help li { margin: 0 0 6px; }
+#box .help ul { padding-left: 18px; margin: 0 0 8px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opts .pick { flex: 1 1 70px; padding: 10px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--sunk); font-weight: 650; }
+.opts .pick:hover { border-color: var(--accent); background: var(--accent-soft); }
+.opts .pick small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); min-height: 15px; }
+.opts.list { flex-direction: column; }
+.opts.list .pick { flex: none; text-align: left; font-weight: 500; }
+.opts.list .pick b { font-weight: 650; }
+textarea { width: 100%; min-height: 76px; font: inherit; color: inherit; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; resize: vertical; }
+.endrow { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+code { display: block; font: 12.5px ui-monospace, Consolas, monospace; padding: 8px 10px; border-radius: 7px; background: var(--sunk); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+
+@media (max-width: 860px) {
+  html, body, #app { height: auto; }
+  #app { min-height: 100%; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  aside { border-left: 0; border-top: 1px solid var(--line); max-height: 240px; }
+  #over { position: fixed; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div id="where">Co-op Playtest</div>
+    <nav>
+      <button class="quiet" id="helpBtn">Help</button>
+      <button class="quiet" id="pauseBtn" disabled>Pause</button>
+      <button class="quiet" id="stopBtn" disabled>Stop for now</button>
+    </nav>
+  </header>
+  <main>
+    <section id="board"><div id="enemies" class="row"></div><div id="players" class="row"></div></section>
+    <aside><h2>What happened</h2><div id="feed" aria-live="polite"></div></aside>
+  </main>
+  <section id="tray">
+    <div id="bar">
+      <div id="hint"></div>
+      <button class="act" id="waitBtn" disabled>Let the others move <kbd>W</kbd></button>
+      <button class="act main" id="endBtn" disabled>End turn <kbd>E</kbd></button>
+    </div>
+    <div id="hand"></div>
+  </section>
+  <div id="over" hidden><div id="box" role="dialog" aria-modal="true"></div></div>
+</div>
+<script>
+const token = new URLSearchParams(location.search).get("t");
+let S = null, tick = -1, picked = null, seenUntil = 0, helpOpen = false, lost = false;
+let lastHp = {}, deltas = {}, lastTable = "", hpFight = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+const HELP = `<div class="help">
+  <p class="ask">How to play</p>
+  <ul>
+    <li>Click a card to play it. If it could go to more than one player or enemy, click who gets it. Press Esc to change your mind.</li>
+    <li><b>Let the others move</b> hands over. You go first every round, and you get another move after them.</li>
+    <li><b>End turn</b> when you're done. The enemies attack once every player has ended their turn.</li>
+    <li>Enemy attacks hit every player. Block only lasts until your next turn.</li>
+    <li><b>Would lose</b> is the HP a player would lose in the next enemy attack, through their Block.</li>
+  </ul>
+  <p><b>Keys:</b> <kbd>1</kbd>-<kbd>9</kbd> cards, then the target's letter, <kbd>W</kbd> let the others move, <kbd>E</kbd> end turn, <kbd>P</kbd> pause, <kbd>?</kbd> this help.</p>
+  <p>Your place is saved as you play. You can stop at any point, even in the middle of a fight, and carry on later.</p>
+  <div class="endrow"><button class="act main" id="helpClose">Back to the game</button></div>
+</div>`;
+
+async function poll() {
+  for (;;) {
+    try {
+      const r = await fetch(`/state?t=${encodeURIComponent(token)}&since=${tick}`, {cache: "no-store"});
+      if (!r.ok) throw new Error(r.status);
+      const s = await r.json();
+      lost = false;
+      if (s.tick !== tick) { tick = s.tick; take(s); }
+      if (s.done) return;
+    } catch (e) {
+      if (S && S.done) return;
+      lost = true;
+      render();
+      await new Promise(done => setTimeout(done, 1500));
+    }
+  }
+}
+
+function take(s) {
+  const tableNow = JSON.stringify(s.table);
+  if (s.table && tableNow !== lastTable) {
+    lastTable = tableNow;
+    if (s.heading !== hpFight) { lastHp = {}; hpFight = s.heading; }      // a new fight: its HP isn't a change from the last one
+    const units = [...s.table.enemies, ...s.table.players];
+    const next = {};
+    deltas = {};
+    for (const u of units) {
+      next[u.name] = u.hp;
+      if (u.name in lastHp && lastHp[u.name] !== u.hp) deltas[u.name] = u.hp - lastHp[u.name];
+    }
+    lastHp = next;
+  }
+  if (!S && s.total) seenUntil = s.total;
+  S = s;
+  render();
+}
+
+async function send(text) {
+  if (!S || !S.prompt) return;
+  const seq = S.prompt.seq;
+  seenUntil = S.total;
+  picked = null;
+  S.prompt = null;
+  render();
+  await fetch("/answer", {method: "POST", headers: {"Content-Type": "application/json", "X-Token": token}, body: JSON.stringify({seq, text})});
+}
+
+const isMove = () => S && S.prompt && S.prompt.kind === "move";
+const canDo = opt => isMove() && S.prompt.options.includes(opt);
+const pips = (on, max) => `<span class="pips">${Array.from({length: Math.max(on, max)}, (_, i) => `<i class="pip ${i < on ? "on" : ""}"></i>`).join("")}</span>`;
+const bar = u => `<div class="hp"><div class="track"><div class="fill ${u.hp / u.max_hp < .34 ? "low" : ""}" style="width:${Math.max(0, 100 * u.hp / u.max_hp)}%"></div></div>
+  <span class="hpnum">${u.hp}/${u.max_hp}${deltas[u.name] ? `<span class="delta ${deltas[u.name] < 0 ? "down" : "up"}"> ${deltas[u.name] > 0 ? "+" : "−"}${Math.abs(deltas[u.name])}</span>` : ""}</span></div>`;
+const chips = list => list.length ? `<div class="chips">${list.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>` : "";
+
+function pickedMoves() {
+  return picked === null ? [] : S.table.hand[picked].moves;
+}
+
+function renderBoard() {
+  const t = S.table;
+  if (!t) { $("enemies").innerHTML = ""; $("players").innerHTML = ""; $("hand").innerHTML = ""; return; }
+  const aims = new Map(pickedMoves().map(m => [m.to, m.send]));
+  $("enemies").innerHTML = t.enemies.map(e => {
+    const aim = aims.get(e.letter);
+    return `<${aim ? "button" : "div"} class="unit ${e.alive ? "" : "gone"} ${aim ? "aim" : ""}" ${aim ? `data-send="${esc(aim)}"` : ""}>
+      ${aim ? `<kbd class="letter">${esc(e.letter.toUpperCase())}</kbd>` : ""}
+      <div class="top"><span class="name">${esc(e.name)}</span>${e.block ? `<span class="tag blockv">Block ${e.block}</span>` : ""}</div>
+      ${bar(e)}
+      ${e.alive ? `<div class="next ${e.attacks ? "hit" : ""}">Next: ${esc(e.next)}</div>` : `<div class="next">Defeated</div>`}
+      ${e.alive && e.intangible ? `<div class="warn">Intangible: every hit on it does only 1 damage</div>` : ""}
+      ${chips(e.statuses)}
+    </${aim ? "button" : "div"}>`;
+  }).join("");
+  $("players").innerHTML = t.players.map(p => {
+    const code = p.you ? "you" : p.code;
+    const aim = aims.get(code);
+    const body = !p.alive ? `<div class="next">Knocked out</div>` : `${bar(p)}
+      <div class="line"><span>Block <span class="blockv">${p.block}</span></span><span>Energy ${p.energy}/${p.max_energy}${pips(p.energy, p.max_energy)}</span>
+      <span class="danger ${p.danger ? "bad" : "fine"}">${p.danger ? `Would lose ${p.danger}` : "Safe"}</span></div>
+      ${chips(p.statuses)}
+      ${p.you ? "" : `<div class="minis"><span class="label">Hand</span>${p.hand.length ? p.hand.map(c => `<div class="mini ${esc(c.type)}"><span class="mcost" title="Energy cost">${esc(c.cost)}</span><span class="mname">${esc(c.name)}</span><span class="mtext">${esc(c.text)}</span></div>`).join("") : `<span class="mtext">Empty</span>`}</div>`}`;
+    return `<${aim !== undefined ? "button" : "div"} class="unit ${p.you ? "you" : ""} ${p.alive ? "" : "gone"} ${aim !== undefined ? "aim" : ""}" ${aim !== undefined ? `data-send="${esc(aim)}"` : ""}>
+      ${aim !== undefined && code !== "you" ? `<kbd class="letter">${esc(code.toUpperCase())}</kbd>` : ""}
+      <div class="top"><span class="name">${esc(p.name)}</span>${p.ended ? `<span class="tag">Ended turn</span>` : ""}</div>
+      ${body}
+    </${aim !== undefined ? "button" : "div"}>`;
+  }).join("");
+  const live = isMove();
+  const standing = t.enemies.filter(e => e.alive), allFaded = standing.length > 0 && standing.every(e => e.intangible);
+  $("hand").innerHTML = t.hand.map((c, i) => `<button class="card ${esc(c.type)} ${picked === i ? "picked" : ""}" data-card="${i}" ${live && c.moves.length ? "" : "disabled"}>
+      <div class="head"><span class="cost" title="Energy cost">${esc(c.cost)}</span><span class="cname">${esc(c.name)}</span></div>
+      <div class="ctext">${esc(c.text)}</div>
+      ${allFaded && c.type === "attack" ? `<div class="cwarn">Intangible: 1 damage a hit now</div>` : ""}
+      <div class="cfoot"><span>${esc(c.type)}</span>${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}</div>
+    </button>`).join("");
+}
+
+function renderBar() {
+  const t = S.table, hint = $("hint");
+  hint.className = "";
+  if (!isMove() || !t) {
+    hint.textContent = "";
+  } else if (picked !== null) {
+    hint.className = "aiming";
+    hint.textContent = `Who gets ${t.hand[picked].name}? Click them, or press Esc to change your mind.`;
+  } else if (t.opening) {
+    hint.textContent = "You can go first. Play what you like, then let the others move.";
+  } else if (t.partner_waiting) {
+    hint.textContent = "Partner is waiting to see what you do.";
+  } else if (!t.can_wait) {
+    hint.textContent = "Partner has finished. Play your cards or end your turn.";
+  } else {
+    hint.textContent = "Your move.";
+  }
+  $("waitBtn").disabled = !canDo("w");
+  $("endBtn").disabled = !canDo("e");
+  $("pauseBtn").disabled = !(S.prompt && S.prompt.options.length && !S.prompt.options.includes("go"));
+  $("stopBtn").disabled = !isMove();
+}
+
+function renderFeed() {
+  const feed = $("feed"), first = S.total - S.lines.length;
+  feed.innerHTML = S.lines.map((line, i) => {
+    const kind = /^Round \d/.test(line) ? "round" : line.startsWith("===") ? "fight" : /^The enemies act/.test(line) ? "enemy" : "";
+    return `<div class="${kind} ${first + i >= seenUntil && !kind ? "new" : ""}">${esc(line.replace(/^=+\s*|\s*=+$/g, ""))}</div>`;
+  }).join("");
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderOver() {
+  const over = $("over"), box = $("box");
+  const say = S && S.notice ? `<p class="note">${esc(S.notice)}</p>` : "";
+  let html = "";
+  if (lost) {
+    html = `<p class="ask">The game's window has closed</p><p class="note">Your place is saved. To carry on:</p><code>${esc(S ? S.resume : "")}</code>`;
+  } else if (helpOpen) {
+    html = HELP;
+  } else if (S && S.done) {
+    html = `<p class="ask">That's everything</p>${say}<p class="note">You can close this tab and the game's window.</p>`;
+  } else if (!S || (!S.prompt && !S.table)) {
+    html = `<p class="ask">Getting ready</p>${say || `<p class="note">Loading the game and your partner...</p>`}`;
+  } else if (S.prompt && S.prompt.kind !== "move") {
+    html = say + questionHtml(S.prompt);
+  }
+  if (!html && isMove() && S.notice) {
+    html = `${say}<div class="endrow"><button class="act main" id="noticeOk">Got it</button></div>`;
+    if (noticeSeen === S.notice) html = "";
+  }
+  over.hidden = !html;
+  if (html && box.dataset.shown !== html) {
+    box.innerHTML = html;
+    box.dataset.shown = html;
+    const area = box.querySelector("textarea");
+    if (area) area.focus();
+  }
+}
+let noticeSeen = "";
+
+function questionHtml(q) {
+  const ask = `<p class="ask">${esc(q.text)}</p>`;
+  if (!q.options.length) {
+    return `${ask}<textarea id="noteText" placeholder="Type here, or skip"></textarea>
+      <div class="endrow">${q.skip ? `<button class="act" data-answer="">Skip</button>` : ""}<button class="act main" id="noteSend">Send</button></div>`;
+  }
+  const long = q.options.some(o => (q.labels[o] || "").length > 12);
+  const buttons = q.options.map(o => {
+    const label = q.labels[o];
+    if (long) return `<button class="pick" data-answer="${esc(o)}">${esc(label || o)}</button>`;
+    const scale = /^\d+$/.test(o);
+    return `<button class="pick" data-answer="${esc(o)}">${esc(scale ? o : (label || o))}${scale ? `<small>${esc(label || "")}</small>` : ""}</button>`;
+  }).join("");
+  return `${ask}<div class="opts ${long ? "list" : ""}">${buttons}</div>${q.skip ? `<div class="endrow"><button class="act" data-answer="">Skip</button></div>` : ""}`;
+}
+
+function render() {
+  if (S) {
+    $("where").innerHTML = `${esc(S.heading || "Co-op Playtest")}${S.table ? `<span>Round ${S.table.round}</span>` : ""}`;
+    if (picked !== null && (!isMove() || !S.table.hand[picked])) picked = null;
+    renderBoard();
+    renderBar();
+    renderFeed();
+  }
+  renderOver();
+}
+
+function clickCard(i) {
+  if (!isMove() || !S.table.hand[i]) return;
+  const moves = S.table.hand[i].moves;
+  if (!moves.length) return;
+  if (moves.length === 1) return send(moves[0].send);
+  picked = picked === i ? null : i;
+  render();
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("button");
+  if (!el) return;
+  if (el.id === "helpBtn") { helpOpen = !helpOpen; return render(); }
+  if (el.id === "helpClose") { helpOpen = false; return render(); }
+  if (el.id === "noticeOk") { noticeSeen = S.notice; return render(); }
+  if (el.id === "pauseBtn") return send("p");
+  if (el.id === "stopBtn") return send("q");
+  if (el.id === "waitBtn") return send("w");
+  if (el.id === "endBtn") return send("e");
+  if (el.id === "noteSend") return send($("noteText").value);
+  if (el.dataset.card !== undefined) return clickCard(Number(el.dataset.card));
+  if (el.dataset.send !== undefined) return send(el.dataset.send);
+  if (el.dataset.answer !== undefined) return send(el.dataset.answer);
+});
+
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || !S) return;
+  if (e.target.tagName === "TEXTAREA") {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e.target.value); }
+    return;
+  }
+  const key = e.key.toLowerCase();
+  if (key === "?") { helpOpen = !helpOpen; return render(); }
+  if (helpOpen) { if (key === "escape") { helpOpen = false; render(); } return; }
+  const q = S.prompt;
+  if (!q) return;
+  if (q.kind !== "move") {
+    if (q.options.includes(key)) return send(key);
+    if (key === "enter" && q.options.length === 1) return send(q.options[0]);
+    if (key === "p" && q.options.length) return send("p");
+    return;
+  }
+  if (S.notice && noticeSeen !== S.notice) {
+    if (key === "enter" || key === "escape") { noticeSeen = S.notice; render(); }
+    return;
+  }
+  if (picked !== null) {
+    if (key === "escape") { picked = null; return render(); }
+    const move = pickedMoves().find(m => m.to === key);
+    if (move) return send(move.send);
+    if (/^[1-9]$/.test(key)) return clickCard(Number(key) - 1);
+    return;
+  }
+  if (/^[1-9]$/.test(key)) return clickCard(Number(key) - 1);
+  if (key === "0") return clickCard(9);
+  if (key === "w" && canDo("w")) return send("w");
+  if (key === "e") return send("e");
+  if (key === "p") return send("p");
+});
+
+render();
+poll();
+</script>
+</body>
+</html>

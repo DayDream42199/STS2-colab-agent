@@ -1,0 +1,11 @@
+{
+  "own_damage": 1.0,
+  "teammate_damage": 0.5,
+  "kill": 0.1,
+  "useful_block": 0.5,
+  "hp_lost": 1.0,
+  "knockout": 0.5,
+  "round": 0.01,
+  "win": 1.0,
+  "lose": 1.0
+}
