@@ -1,0 +1,106 @@
+{
+  "engine": "real",
+  "real_ally": "ironclad",
+  "real_extra_cards": 4,
+  "real_deck": [
+    "strike",
+    "strike",
+    "strike",
+    "strike",
+    "strike",
+    "defend",
+    "defend",
+    "defend",
+    "defend",
+    "bash",
+    "lift",
+    "intercept",
+    "rally",
+    "coordinate",
+    "believe_in_you",
+    "tremble",
+    "shockwave",
+    "uppercut",
+    "gang_up",
+    "tag_team",
+    "inflame",
+    "stone_armor",
+    "demon_form",
+    "beacon_of_hope"
+  ],
+  "real_deck_presets": [
+    "Pool",
+    "Pool",
+    "Pool",
+    "Whole"
+  ],
+  "real_pool_cards": 8,
+  "history_fights": 0,
+  "real_pool_weights": [
+    0.0,
+    0.5,
+    0.5
+  ],
+  "start_hp": [
+    1.0,
+    1.0,
+    0.75,
+    0.5,
+    0.25
+  ],
+  "min_teammates": 1,
+  "max_teammates": 3,
+  "teammate_types": [
+    "continuous"
+  ],
+  "team_fights": 10,
+  "profile_dir": null,
+  "teammate_lead_prob": 0.3,
+  "enemy_hp_per_player": 125.0,
+  "enemy_atk_per_player": 15.0,
+  "max_rounds": 30,
+  "zero_profiles": false,
+  "no_wait": false,
+  "blind_teammates": false,
+  "sort_teammates": false,
+  "network": "pair",
+  "card_effects": true,
+  "enemy_statuses": true,
+  "swap_profiles": false,
+  "style_profiles": null,
+  "reward_mode": "final",
+  "final": {
+    "penalty": {
+      "A": 35.0,
+      "B": 5.0,
+      "C": 5.0,
+      "D": 15.0,
+      "E": 5.0,
+      "a": 6.0,
+      "b": 10.0,
+      "c": 0.35,
+      "B_team": 15.0,
+      "C_team": 25.0
+    },
+    "collab": {
+      "scoring": "baseline",
+      "w_offense": 0.0,
+      "w_defense": 0.0,
+      "w_others": 0.0,
+      "cdecay": 0.5,
+      "decay_fraction": 0.5
+    },
+    "total_timesteps": 4000000
+  },
+  "reward": {
+    "own_damage": 1.0,
+    "teammate_damage": 0.5,
+    "kill": 0.1,
+    "useful_block": 0.5,
+    "hp_lost": 1.0,
+    "knockout": 0.5,
+    "round": 0.01,
+    "win": 1.0,
+    "lose": 1.0
+  }
+}
